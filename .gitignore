@@ -1,0 +1,95 @@
+# ---------- 环境变量与本地配置（含密钥，切勿提交） ----------
+.env
+.env.local
+.env.*.local
+*.env.local
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.eggs/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+ENV/
+.conda/
+
+# ---------- IDE / 编辑器 ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ---------- 操作系统 ----------
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- 日志与输出 ----------
+*.log
+output/
+logs/
+app.log
+
+# ---------- 测试与覆盖率 ----------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.cache
+
+# ---------- 类型检查与 Lint ----------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# ---------- Jupyter ----------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---------- 其他 ----------
+*.bak
+*.tmp
+*.temp
+.cache/
+
+# ChromaDB 向量数据库数据目录
+chromaDB/
+
+# Markdown：忽略所有 .md，仅保留 README
+*.md
+!README.md
+!readme.md
