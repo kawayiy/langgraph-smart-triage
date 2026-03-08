@@ -1,119 +1,119 @@
 # LangGraph Smart Triage
 
-一个基于 `LangGraph + FastAPI + Gradio + Chroma + PostgreSQL` 的智能分诊 / 健康档案问答项目。  
-系统围绕“意图识别 -> 工具调用 -> 检索评估 -> 查询重写 -> 最终生成”构建，支持流式接口、多轮会话、简单长期记忆，以及健康档案检索场景演示。
+An intelligent triage and health-record Q&A project built with `LangGraph`, `FastAPI`, `Gradio`, `Chroma`, and `PostgreSQL`.
+The system is organized around the flow of "intent recognition -> tool calling -> retrieval grading -> query rewriting -> final generation", and supports streaming responses, multi-turn conversations, lightweight long-term memory, and health-record retrieval demos.
 
-## 项目特点
+## Features
 
-- 基于 `LangGraph` 构建可控的智能体流程，而不是单轮问答。
-- 支持 `OpenAI`、`Qwen`、`OneAPI`、`Ollama` 多种模型接入方式。
-- 提供健康档案检索工具 `retrieve` 和计算工具 `multiply`。
-- 检索后会进行相关性打分，不相关时自动重写问题再检索。
-- 提供三种使用方式：`FastAPI` 接口、`Gradio Web UI`、命令行交互。
-- 支持流式输出，接口风格兼容 OpenAI Chat Completions。
-- 使用 `PostgreSQL` 保存 LangGraph checkpoint / store，用于会话状态与记忆能力。
+- Uses `LangGraph` to build a controllable agent workflow instead of a simple single-turn chatbot.
+- Supports multiple model backends: `OpenAI`, `Qwen`, `OneAPI`, and `Ollama`.
+- Includes a health-record retrieval tool `retrieve` and a calculation tool `multiply`.
+- Grades retrieval relevance and rewrites the query automatically when results are not relevant enough.
+- Provides three entry points: `FastAPI` API, `Gradio` web UI, and CLI interaction.
+- Supports streaming output with an OpenAI-style Chat Completions interface.
+- Uses `PostgreSQL` for LangGraph checkpoint/store persistence for conversation state and memory.
 
-## 适用场景
+## Use Cases
 
-- 健康档案问答
-- 智能分诊流程演示
-- RAG + Agent + LangGraph 项目模板
-- 多模型、多工具路由实验
+- Health-record question answering
+- Intelligent triage workflow demos
+- A starter template for `RAG + Agent + LangGraph`
+- Multi-model and multi-tool routing experiments
 
-## 整体架构
+## Architecture
 
-### 1. 交互层
+### 1. Interaction Layer
 
-- `main.py`：FastAPI 服务，对外暴露 `POST /v1/chat/completions`
-- `webUI.py`：Gradio 前端，支持登录、注册、历史会话、聊天
-- `ragAgent.py`：命令行调试入口
-- `apiTest.py`：接口联调脚本
+- `main.py`: FastAPI service exposing `POST /v1/chat/completions`
+- `webUI.py`: Gradio frontend with login, registration, chat history, and conversation UI
+- `ragAgent.py`: CLI debugging entry point
+- `apiTest.py`: API integration test script
 
-### 2. 智能体编排层
+### 2. Agent Orchestration Layer
 
-`ragAgent.py`` 中定义了 LangGraph 流程，核心节点包括：
+The LangGraph workflow is defined in `ragAgent.py`, with these core nodes:
 
-- `agent`：分析问题、结合记忆、决定是否调用工具
-- `call_tools`：并行执行工具
-- `grade_documents`：判断检索内容是否相关
-- `rewrite`：在检索不佳时重写问题
-- `generate`：生成最终回答
+- `agent`: analyzes the question, combines memory, and decides whether tools should be called
+- `call_tools`: runs tools in parallel
+- `grade_documents`: checks whether retrieved content is relevant
+- `rewrite`: rewrites the query when retrieval quality is poor
+- `generate`: produces the final answer
 
-### 3. 工具与知识层
+### 3. Tools and Knowledge Layer
 
-- `utils/tools_config.py`：工具注册
-- `vectorSave.py`：PDF 切分、向量化、写入 Chroma
-- `utils/pdfSplitTest_Ch.py` / `utils/pdfSplitTest_En.py`：中英文 PDF 切分处理
-- `prompts/`：各节点提示词模板
+- `utils/tools_config.py`: tool registration
+- `vectorSave.py`: PDF chunking, embedding generation, and Chroma ingestion
+- `utils/pdfSplitTest_Ch.py` / `utils/pdfSplitTest_En.py`: Chinese and English PDF splitting utilities
+- `prompts/`: prompt templates for each node
 
-### 4. 存储层
+### 4. Storage Layer
 
-- `Chroma`：本地向量库，默认目录为 `chromaDB`
-- `PostgreSQL`：用于 LangGraph checkpoint 与 store
-- `docker-compose.yml`：提供本地 PostgreSQL 启动方式
+- `Chroma`: local vector store, default directory `chromaDB`
+- `PostgreSQL`: used for LangGraph checkpoint and store
+- `docker-compose.yml`: local PostgreSQL startup configuration
 
-## 核心流程
+## Core Workflow
 
-1. 用户提问进入 `agent` 节点。
-2. 模型判断是否调用工具。
-3. 若调用 `retrieve`，先检索健康档案，再进入 `grade_documents` 进行相关性判断。
-4. 如果相关性不足，则进入 `rewrite`，重写问题后再回到 `agent`。
-5. 如果检索结果有效，或调用的是普通工具，则进入 `generate` 生成最终答复。
-6. 最终结果可通过普通 JSON 或 SSE 流返回。
+1. A user question enters the `agent` node.
+2. The model decides whether it needs to call any tools.
+3. If `retrieve` is called, the system first searches health records, then enters `grade_documents` to evaluate relevance.
+4. If relevance is insufficient, the flow goes to `rewrite`, then returns to `agent` with the rewritten query.
+5. If retrieval is good enough, or a non-retrieval tool was called, the flow goes to `generate`.
+6. The final output is returned either as standard JSON or as an SSE stream.
 
-## 项目结构
+## Project Structure
 
 ```text
 langgraph-smart-triage/
-├─ main.py                       # FastAPI 服务入口
-├─ ragAgent.py                   # LangGraph 核心逻辑与 CLI 入口
-├─ webUI.py                      # Gradio 演示前端
-├─ vectorSave.py                 # PDF -> 向量库灌库脚本
-├─ apiTest.py                    # API 调试脚本
-├─ docker-compose.yml            # PostgreSQL 容器配置
-├─ requirements.txt              # Python 依赖
-├─ .env.example                  # 环境变量模板
+├─ main.py                       # FastAPI service entry point
+├─ ragAgent.py                   # LangGraph core logic and CLI entry
+├─ webUI.py                      # Gradio demo frontend
+├─ vectorSave.py                 # PDF -> vector store ingestion script
+├─ apiTest.py                    # API test script
+├─ docker-compose.yml            # PostgreSQL container config
+├─ requirements.txt              # Python dependencies
+├─ .env.example                  # Environment variable template
 ├─ prompts/
 │  ├─ prompt_template_agent.txt
 │  ├─ prompt_template_grade.txt
 │  ├─ prompt_template_rewrite.txt
 │  └─ prompt_template_generate.txt
 └─ utils/
-   ├─ config.py                  # 项目配置
-   ├─ llms.py                    # 多模型初始化
-   ├─ tools_config.py            # 工具注册
-   ├─ pdfSplitTest_Ch.py         # 中文 PDF 切分
-   └─ pdfSplitTest_En.py         # 英文 PDF 切分
+   ├─ config.py                  # Project configuration
+   ├─ llms.py                    # Multi-model initialization
+   ├─ tools_config.py            # Tool registration
+   ├─ pdfSplitTest_Ch.py         # Chinese PDF splitting
+   └─ pdfSplitTest_En.py         # English PDF splitting
 ```
 
-## 环境要求
+## Requirements
 
-- Python `3.10+` 或更高版本
-- PostgreSQL `15` 左右版本
-- 可用的 LLM / Embedding 服务之一：
+- Python `3.10+`
+- PostgreSQL `15` or a similar recent version
+- One available LLM / embedding backend:
   - `Qwen / DashScope`
   - `OpenAI`
   - `OneAPI`
   - `Ollama`
 
-## 安装依赖
+## Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 环境变量配置
+## Environment Variables
 
-先复制模板：
+First copy the template:
 
 ```bash
 copy .env.example .env
 ```
 
-按需填写以下配置：
+Then fill in the required values:
 
 ```env
-# OpenAI 兼容接口
+# OpenAI-compatible API
 OPENAI_API_KEY=
 OPENAI_BASE_URL=
 
@@ -129,96 +129,96 @@ DB_URI=
 POSTGRES_USER=
 POSTGRES_PASSWORD=
 
-# LangSmith（可选）
+# LangSmith (optional)
 # LANGCHAIN_TRACING_V2=
 # LANGCHAIN_API_KEY=
 ```
 
-说明：
+Notes:
 
-- 默认模型类型在 `utils/config.py` 中为 `qwen`
-- 默认服务端口为 `8013`
-- `webUI.py` 默认访问后端地址 `http://localhost:8013/v1/chat/completions`
+- The default model type in `utils/config.py` is `qwen`
+- The default backend port is `8013`
+- `webUI.py` calls `http://localhost:8013/v1/chat/completions` by default
 
-## 快速开始
+## Quick Start
 
-### 1. 启动 PostgreSQL
+### 1. Start PostgreSQL
 
-如果你使用 Docker：
+If you use Docker:
 
 ```bash
 docker compose up -d
 ```
 
-或：
+Or:
 
 ```bash
 docker-compose up -d
 ```
 
-如果使用本地 PostgreSQL，请确保 `DB_URI` 可连接，并且数据库已正常启动。
+If you use a local PostgreSQL instance instead, make sure `DB_URI` is valid and the database is running.
 
-### 2. 准备知识库数据
+### 2. Prepare the Knowledge Base
 
-项目默认通过 `vectorSave.py` 将 PDF 内容切分并写入本地 Chroma。
+By default, the project uses `vectorSave.py` to split PDF content and write vectors into local Chroma storage.
 
-运行前请先检查这些配置：
+Before running it, check these settings:
 
-- `vectorSave.py` 中的 `INPUT_PDF`
-- `vectorSave.py` 中的 `TEXT_LANGUAGE`
-- `vectorSave.py` 中的 `llmType`
-- `utils/config.py` 与 `vectorSave.py` 中的 Chroma 集合名是否一致
+- `INPUT_PDF` in `vectorSave.py`
+- `TEXT_LANGUAGE` in `vectorSave.py`
+- `llmType` in `vectorSave.py`
+- Whether the Chroma collection name in `vectorSave.py` matches the one in `utils/config.py`
 
-然后执行：
+Then run:
 
 ```bash
 python vectorSave.py
 ```
 
-默认会将向量写入 `chromaDB` 目录下的 `demo001` 集合。
+By default, vectors are written into the `demo001` collection under the `chromaDB` directory.
 
-### 3. 启动后端 API
+### 3. Start the Backend API
 
 ```bash
 python main.py
 ```
 
-启动后接口地址为：
+API endpoint:
 
 `http://localhost:8013/v1/chat/completions`
 
-### 4. 启动 Web UI
+### 4. Start the Web UI
 
 ```bash
 python webUI.py
 ```
 
-默认访问地址：
+Default UI address:
 
 `http://127.0.0.1:7861`
 
-### 5. 命令行调试
+### 5. Run the CLI
 
 ```bash
 python ragAgent.py
 ```
 
-适合快速验证 LangGraph 主流程是否可用。
+This is useful for quickly validating the main LangGraph workflow.
 
-## API 用法
+## API Usage
 
-### 请求地址
+### Endpoint
 
 `POST /v1/chat/completions`
 
-### 请求体示例
+### Request Example
 
 ```json
 {
   "messages": [
     {
       "role": "user",
-      "content": "查询张三九的健康档案信息"
+      "content": "Query the health record of Zhang Sanjiu"
     }
   ],
   "stream": false,
@@ -227,22 +227,22 @@ python ragAgent.py
 }
 ```
 
-### `curl` 示例
+### `curl` Example
 
 ```bash
 curl -X POST "http://localhost:8013/v1/chat/completions" ^
   -H "Content-Type: application/json" ^
-  -d "{\"messages\":[{\"role\":\"user\",\"content\":\"查询张三九的健康档案信息\"}],\"stream\":false,\"userId\":\"8010\",\"conversationId\":\"8010\"}"
+  -d "{\"messages\":[{\"role\":\"user\",\"content\":\"Query the health record of Zhang Sanjiu\"}],\"stream\":false,\"userId\":\"8010\",\"conversationId\":\"8010\"}"
 ```
 
-### Python 示例
+### Python Example
 
 ```python
 import requests
 
 url = "http://localhost:8013/v1/chat/completions"
 payload = {
-    "messages": [{"role": "user", "content": "查询张三九的健康档案信息"}],
+    "messages": [{"role": "user", "content": "Query the health record of Zhang Sanjiu"}],
     "stream": False,
     "userId": "8010",
     "conversationId": "8010",
@@ -252,80 +252,79 @@ resp = requests.post(url, json=payload, timeout=60)
 print(resp.json())
 ```
 
-### 流式返回
+### Streaming Responses
 
-当 `stream=true` 时，后端会返回 `text/event-stream`，每个 chunk 的结构与 OpenAI 风格的 chat completion chunk 类似。
+When `stream=true`, the backend returns `text/event-stream`, and each chunk follows an OpenAI-style chat completion chunk structure.
 
-## 主要配置项
+## Key Configuration
 
-`utils/config.py` 中当前包含以下关键配置：
+`utils/config.py` currently contains these important settings:
 
-- `LLM_TYPE`：默认模型类型，当前为 `qwen`
-- `CHROMADB_DIRECTORY`：向量库存储目录，默认 `chromaDB`
-- `CHROMADB_COLLECTION_NAME`：集合名，默认 `demo001`
-- `DB_URI`：PostgreSQL 连接串
-- `HOST` / `PORT`：FastAPI 服务监听地址与端口
-- `LOG_FILE`：日志文件，默认 `output/app.log`
+- `LLM_TYPE`: default model type, currently `qwen`
+- `CHROMADB_DIRECTORY`: vector store directory, default `chromaDB`
+- `CHROMADB_COLLECTION_NAME`: collection name, default `demo001`
+- `DB_URI`: PostgreSQL connection string
+- `HOST` / `PORT`: FastAPI host and port
+- `LOG_FILE`: log file path, default `output/app.log`
 
-## 提示词模板
+## Prompt Templates
 
-`prompts/` 目录中包含智能体各阶段的提示词：
+The `prompts/` directory contains the prompts used at each stage:
 
-- `prompt_template_agent.txt`：工具选择与分诊
-- `prompt_template_grade.txt`：检索结果相关性评分
-- `prompt_template_rewrite.txt`：问题重写
-- `prompt_template_generate.txt`：最终回答生成
+- `prompt_template_agent.txt`: triage logic and tool selection
+- `prompt_template_grade.txt`: retrieval relevance grading
+- `prompt_template_rewrite.txt`: query rewriting
+- `prompt_template_generate.txt`: final response generation
 
-## 当前已实现的能力
+## Implemented Capabilities
 
-- 基于健康档案的 RAG 问答
-- 简单计算工具调用
-- 多轮对话
-- 流式 / 非流式接口
-- 会话级状态跟踪
-- 用户级长期记忆
-- Gradio 前端演示
+- RAG-based question answering over health records
+- Simple calculator tool calling
+- Multi-turn conversation
+- Streaming and non-streaming API support
+- Conversation-level state tracking
+- User-level long-term memory
+- Gradio demo frontend
 
-## 当前限制
+## Current Limitations
 
-- `webUI.py` 中的用户系统是内存态，重启后不会保留账号和历史会话。
-- 向量库构建依赖手动执行 `vectorSave.py`，不是自动初始化。
-- 项目目前主要围绕健康档案问答演示构建，工具种类还比较少。
-- 运行依赖外部模型服务与数据库环境，首次配置成本相对较高。
+- The user system in `webUI.py` is in-memory only, so accounts and conversation history are lost after restart.
+- Vector store initialization depends on manually running `vectorSave.py`.
+- The project is currently focused on the health-record QA demo, with only a small number of tools.
+- Running the system requires external model services and database setup, so initial environment configuration is relatively heavy.
 
-## 常见排查
+## Troubleshooting
 
-### 1. 启动时报数据库连接错误
+### 1. Database connection error on startup
 
-检查：
+Check:
 
-- `DB_URI` 是否正确
-- PostgreSQL 是否已启动
-- 用户名、密码、端口是否与 `docker-compose.yml` 一致
+- Whether `DB_URI` is correct
+- Whether PostgreSQL is running
+- Whether username, password, and port match `docker-compose.yml`
 
-### 2. 检索不到内容
+### 2. No retrieval results
 
-检查：
+Check:
 
-- 是否已执行 `python vectorSave.py`
-- `vectorSave.py` 写入的集合名是否与 `utils/config.py` 中一致
-- `INPUT_PDF` 是否正确
-- embedding 服务是否可用
+- Whether `python vectorSave.py` has been run
+- Whether the collection name written by `vectorSave.py` matches `utils/config.py`
+- Whether `INPUT_PDF` is correct
+- Whether the embedding service is available
 
-### 3. Web UI 无法返回结果
+### 3. Web UI does not return results
 
-检查：
+Check:
 
-- `main.py` 是否已启动
-- `webUI.py` 中的后端地址是否仍为 `http://localhost:8013/v1/chat/completions`
-- 是否使用了正确的端口
+- Whether `main.py` is running
+- Whether the backend URL in `webUI.py` is still `http://localhost:8013/v1/chat/completions`
+- Whether the correct port is being used
 
-## 后续可扩展方向
+## Possible Next Steps
 
-- 将 `webUI.py` 的账号与会话改为数据库持久化
-- 增加更多医疗辅助工具
-- 增加文档上传与自动灌库能力
-- 增加接口鉴权与权限控制
-- 增加容器化一键部署
-
+- Persist accounts and conversations from `webUI.py` into a database
+- Add more medical assistant tools
+- Add document upload and automatic vector ingestion
+- Add API authentication and access control
+- Add one-command containerized deployment
 

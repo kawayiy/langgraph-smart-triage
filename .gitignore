@@ -1,4 +1,4 @@
-# ---------- 环境变量与本地配置（含密钥，切勿提交） ----------
+# ---------- Environment variables and local config (contains secrets, do not commit) ----------
 .env
 .env.local
 .env.*.local
@@ -28,14 +28,14 @@ wheels/
 *.egg
 .eggs/
 
-# 虚拟环境
+# Virtual environments
 venv/
 .venv/
 env/
 ENV/
 .conda/
 
-# ---------- IDE / 编辑器 ----------
+# ---------- IDE / Editor ----------
 .idea/
 .vscode/
 *.swp
@@ -45,20 +45,20 @@ ENV/
 .pydevproject
 .settings/
 
-# ---------- 操作系统 ----------
+# ---------- Operating system ----------
 .DS_Store
 .DS_Store?
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# ---------- 日志与输出 ----------
+# ---------- Logs and output ----------
 *.log
 output/
 logs/
 app.log
 
-# ---------- 测试与覆盖率 ----------
+# ---------- Tests and coverage ----------
 .pytest_cache/
 .coverage
 .coverage.*
@@ -70,7 +70,7 @@ coverage.xml
 .hypothesis/
 .cache
 
-# ---------- 类型检查与 Lint ----------
+# ---------- Type checking and lint ----------
 .mypy_cache/
 .dmypy.json
 dmypy.json
@@ -80,17 +80,18 @@ dmypy.json
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# ---------- 其他 ----------
+# ---------- Other ----------
 *.bak
 *.tmp
 *.temp
 .cache/
 
-# ChromaDB 向量数据库数据目录
+# ChromaDB vector database data directory
 chromaDB/
 
-# Markdown：忽略所有 .md，仅保留 README
+# Markdown: ignore all .md files except README
 *.md
 !README.md
 !readme.md
 !README_EN.md
+!README_CN.md
