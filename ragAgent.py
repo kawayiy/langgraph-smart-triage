@@ -1,70 +1,70 @@
- # 导入日志模块，用于记录程序运行时的信息
+# Import the logging module for runtime logs
 import logging
 from concurrent_log_handler import ConcurrentRotatingFileHandler
-# 导入操作系统接口模块，用于处理文件路径和环境变量
+# Import OS interfaces for paths and environment variables
 import os
-# 导入系统模块，用于处理系统相关的操作，如退出程序
+# Import the system module for system-level operations such as exiting
 import sys
 import threading
 import time
-# 导入UUID模块，用于生成唯一标识符
+# Import the UUID module for generating unique identifiers
 import uuid
-# 从html模块导入escape函数，用于转义HTML特殊字符
+# Import `escape` from `html` to escape HTML special characters
 from html import escape
-# 从typing模块导入类型提示工具
+# Import typing helpers
 from typing import Literal, Annotated, Sequence, Optional
-# 从typing_extensions导入TypedDict，用于定义类型化的字典
+# Import `TypedDict` from `typing_extensions` for typed dictionaries
 from typing_extensions import TypedDict
-# 导入LangChain的提示模板类
+# Import LangChain prompt template classes
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
-# 导入LangChain的消息基类
+# Import the base LangChain message class
 from langchain_core.messages import BaseMessage
-# 导入消息处理函数，用于追加消息
+# Import the message helper used for appending messages
 from langgraph.graph.message import add_messages
-# 导入预构建的工具条件和工具节点
+# Import the prebuilt tool condition and tool node
 from langgraph.prebuilt import tools_condition, ToolNode
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_core.messages import ToolMessage
-# 导入状态图和起始/结束节点的定义
+# Import the state graph and start/end node constants
 from langgraph.graph import StateGraph, START, END
-# 导入基础存储接口
+# Import the base store interface
 from langgraph.store.base import BaseStore
-# 导入可运行配置类
+# Import the runnable configuration class
 from langchain_core.runnables import RunnableConfig
-# 导入Postgres存储类
+# Import the Postgres store implementation
 from langgraph.store.postgres import PostgresStore
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-# 导入 psycopg2 的操作异常类，用于捕获数据库连接错误
+# Import psycopg2 operational errors for database connection failures
 from psycopg2 import OperationalError
-# 导入Postgres检查点保存类
+# Import the Postgres checkpoint saver
 from langgraph.checkpoint.postgres import PostgresSaver
-# 导入PostgreSQL连接池类及池超时异常
+# Import the PostgreSQL connection pool and timeout exception
 from psycopg_pool import ConnectionPool, PoolTimeout
-# 导入Pydantic的基类和字段定义工具
+# Import Pydantic base classes and field helpers
 from pydantic import BaseModel, Field
-# 导入自定义的get_llm函数，用于获取LLM模型
+# Import the local `get_llm` helper
 from utils.llms import get_llm
-# 导入工具配置模块
+# Import the tool configuration helper
 from utils.tools_config import get_tools
-# 导入统一的 Config 类
+# Import the shared `Config` class
 from utils.config import Config
 
-# # 设置日志基本配置，级别为DEBUG或INFO
+# Configure logging at DEBUG or INFO level
 logger = logging.getLogger(__name__)
-# 设置日志器级别为DEBUG
+# Set the logger level to DEBUG
 logger.setLevel(logging.DEBUG)
 # logger.setLevel(logging.INFO)
-logger.handlers = []  # 清空默认处理器
-# 使用ConcurrentRotatingFileHandler
+logger.handlers = []  # Clear default handlers
+# Use `ConcurrentRotatingFileHandler`
 handler = ConcurrentRotatingFileHandler(
-    # 日志文件
+    # Log file
     Config.LOG_FILE,
-    # 日志文件最大允许大小为5MB，达到上限后触发轮转
+    # Rotate when the log file reaches 5 MB
     maxBytes = Config.MAX_BYTES,
-    # 在轮转时，最多保留3个历史日志文件
+    # Keep at most 3 historical log files
     backupCount = Config.BACKUP_COUNT
 )
-# 设置处理器级别为DEBUG
+# Set the handler level to DEBUG
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -72,127 +72,127 @@ handler.setFormatter(logging.Formatter(
 logger.addHandler(handler)
 
 
-# 定义消息状态类，使用TypedDict进行类型注解
+# Message state definition using `TypedDict`
 class MessagesState(TypedDict):
-    # 定义messages字段，类型为消息序列，使用add_messages处理追加
+    # Message sequence with append behavior handled by `add_messages`
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    # 定义relevance_score字段，用于存储文档相关性评分
+    # Relevance score for retrieved documents
     relevance_score: Annotated[Optional[str], "Relevance score of retrieved documents, 'yes' or 'no'"]
-    # 定义rewrite_count字段，用于跟踪问题重写的次数，达到次数退出graph的递归循环
+    # Number of query rewrites, used to stop endless graph recursion
     rewrite_count: Annotated[int, "Number of times query has been rewritten"]
 
-# 定义工具配置管理类，用于管理工具及其路由配置
+# Tool configuration manager for tools and routing rules
 class ToolConfig:
-    # 初始化方法，接收工具列表并设置相关属性
+    # Initialize the tool list and derived routing metadata
     def __init__(self, tools):
-        # 将传入的工具列表存储到实例变量 self.tools 中
+        # Store the incoming tool list
         self.tools = tools
-        # 创建一个集合，包含所有工具的名称，使用集合推导式从 tools 中提取 name 属性
+        # Build a set containing all tool names
         self.tool_names = {tool.name for tool in tools}
-        # 调用内部方法 _build_routing_config，动态生成工具路由配置并存储到 self.tool_routing_config
+        # Build the routing map dynamically from the tool definitions
         self.tool_routing_config = self._build_routing_config(tools)
-        # 记录日志，输出初始化完成的工具名称集合和路由配置，便于调试和验证
+        # Log the initialized tools and routing config for debugging
         logger.info(f"Initialized ToolConfig with tools: {self.tool_names}, routing: {self.tool_routing_config}")
 
-    # 内部方法，用于根据工具定义动态构建路由配置
+    # Internal helper that builds routing rules from the tool list
     def  _build_routing_config(self, tools):
-        # 创建一个空字典，用于存储工具名称到目标节点的映射
+        # Map tool names to their target graph nodes
         routing_config = {}
-        # 遍历传入的工具列表，逐个处理每个工具
+        # Process each tool one by one
         for tool in tools:
-            # 将工具名称转换为小写，确保匹配时忽略大小写
+            # Normalize the tool name to lowercase
             tool_name = tool.name.lower()
-            # 检查工具名称中是否包含 "retrieve"，用于判断是否为检索类工具
+            # Treat tools containing `retrieve` as retrieval tools
             if "retrieve" in tool_name:
-                # 如果是检索类工具，将其路由目标设置为 "grade_documents"（需要评分）
+                # Retrieval tools go to `grade_documents`
                 routing_config[tool_name] = "grade_documents"
-                # 记录调试日志，说明该工具被路由到 "grade_documents"，并标注为检索工具
+                # Log the retrieval-tool routing decision
                 logger.debug(f"Tool '{tool_name}' routed to 'grade_documents' (retrieval tool)")
-            # 如果工具名称不包含 "retrieve"
+            # Non-retrieval tools
             else:
-                # 将其路由目标设置为 "generate"（直接生成结果）
+                # Route directly to `generate`
                 routing_config[tool_name] = "generate"
-                # 记录调试日志，说明该工具被路由到 "generate"，并标注为非检索工具
+                # Log the non-retrieval routing decision
                 logger.debug(f"Tool '{tool_name}' routed to 'generate' (non-retrieval tool)")
-        # 检查路由配置字典是否为空（即没有工具被处理）
+        # Warn when no routing entries were built
         if not routing_config:
-            # 如果为空，记录警告日志，提示工具列表可能为空或未正确处理
+            # The tool list may be empty or malformed
             logger.warning("No tools provided or routing config is empty")
-        # 返回生成的路由配置字典
+        # Return the generated routing map
         return routing_config
 
-    # 获取工具列表的方法，返回存储在实例中的 tools
+    # Return the tool list
     def get_tools(self):
-        # 直接返回 self.tools，提供外部访问工具列表的接口
+        # Expose `self.tools`
         return self.tools
 
-    # 获取工具名称集合的方法，返回存储在实例中的 tool_names
+    # Return the tool-name set
     def get_tool_names(self):
-        # 直接返回 self.tool_names，提供外部访问工具名称集合的接口
+        # Expose `self.tool_names`
         return self.tool_names
 
-    # 获取工具路由配置的方法，返回动态生成的路由配置
+    # Return the tool-routing configuration
     def get_tool_routing_config(self):
-        # 直接返回 self.tool_routing_config，提供外部访问路由配置的接口
+        # Expose `self.tool_routing_config`
         return self.tool_routing_config
 
-# 文档相关性评分
+# Document relevance score schema
 class DocumentRelevanceScore(BaseModel):
-    # 定义binary_score字段，表示相关性评分，取值为"yes"或"no"
+    # Binary relevance score: `yes` or `no`
     binary_score: str = Field(description="Relevance score 'yes' or 'no'")
 
-# 自定义异常，表示数据库连接池初始化或状态异常
+# Custom exception for connection-pool initialization or state failures
 class ConnectionPoolError(Exception):
-    """自定义异常，表示数据库连接池初始化或状态异常"""
+    """Custom exception for connection-pool initialization or state failures."""
     pass
 
-# 重定义ToolNode，支持并发处理工具调用
+# Customized `ToolNode` with concurrent tool execution
 class ParallelToolNode(ToolNode):
-    # 初始化方法，继承自ToolNode，接收工具列表和最大线程数参数
+    # Initialize the node with tools and a max worker count
     def __init__(self, tools, max_workers: int = 5):
-        # 调用父类ToolNode的初始化方法，传入工具列表
+        # Initialize the parent `ToolNode`
         super().__init__(tools)
-        # 设置实例变量max_workers，定义线程池的最大工作线程数，默认为5
-        self.max_workers = max_workers  # 线程池最大工作线程数
+        # Maximum worker count for the thread pool
+        self.max_workers = max_workers  # Maximum number of thread-pool workers
 
-    # 定义私有方法，用于执行单个工具调用，返回ToolMessage对象
+    # Execute a single tool call and return a `ToolMessage`
     def _run_single_tool(self, tool_call: dict, tool_map: dict) -> ToolMessage:
-        """执行单个工具调用"""
-        # 使用try-except块捕获工具执行中的异常
+        """Execute a single tool call."""
+        # Catch tool-execution failures
         try:
-            # 从tool_call字典中提取工具名称
+            # Read the tool name from the tool call
             tool_name = tool_call["name"]
-            # 从tool_map中获取对应的工具实例，若不存在则返回None
+            # Look up the tool instance
             tool = tool_map.get(tool_name)
-            # 检查工具是否存在，若不存在则抛出ValueError异常
+            # Fail early if the tool is not registered
             if not tool:
                 raise ValueError(f"Tool {tool_name} not found")
-            # 调用工具的invoke方法，传入工具参数，执行工具逻辑
+            # Execute the tool with its arguments
             result = tool.invoke(tool_call["args"])
-            # 创建并返回ToolMessage对象，包含工具执行结果、调用ID和工具名称
+            # Return a `ToolMessage` carrying the tool result
             return ToolMessage(
                 content=str(result),
                 tool_call_id=tool_call["id"],
                 name=tool_name
             )
-        # 捕获所有异常，记录错误并返回包含错误信息的ToolMessage
+        # Log failures and convert them into `ToolMessage` objects
         except Exception as e:
-            # 记录工具执行失败的错误日志，包含工具名称和异常信息
+            # Log the tool name and error details
             logger.error(f"Error executing tool {tool_call.get('name', 'unknown')}: {e}")
-            # 返回包含错误内容的ToolMessage对象，用于状态更新
+            # Return an error message back into state
             return ToolMessage(
                 content=f"Error: {str(e)}",
                 tool_call_id=tool_call["id"],
                 name=tool_call.get("name", "unknown")
             )
     '''
-    示例
+    Example
     AIMessage(
     content='',
     tool_calls=[
         {
             "name": "retrieve",
-            "args": {"query": "血压记录"},
+            "args": {"query": "blood pressure record"},
             "id": "call_001"
         },
         {
@@ -205,87 +205,87 @@ class ParallelToolNode(ToolNode):
     '''
 
     '''
-     定义可调用方法，使实例可直接调用，实现并行执行所有工具调用
+     Define a callable interface so the instance can be used like a function
      
-    实现 __call__ 后，实例可以像函数一样被调用，例如：
+    After implementing `__call__`, the instance can be invoked like a function:
         node = ParallelToolNode(tools)
-        result = node(state)  # 等价于 node.__call__(state)
+        result = node(state)  # Equivalent to `node.__call__(state)`
     '''
     def __call__(self, state: dict) -> dict:
-        """并行执行所有工具调用"""
-        # 记录日志，表示开始处理工具调用
+        """Execute all tool calls in parallel."""
+        # Log the start of tool-call processing
         logger.info("ParallelToolNode processing tool calls")
-        # 从状态字典中获取最后一条消息
+        # Read the last message from state
         last_message = state["messages"][-1]
-        # 获取最后一条消息中的工具调用列表，若不存在则返回空列表
+        # Read the tool-call list from the last message
         tool_calls = getattr(last_message, "tool_calls", [])
-        # 检查工具调用列表是否为空，若为空则记录警告并返回空消息列表
+        # Warn and return early if there are no tool calls
         if not tool_calls:
             logger.warning("No tool calls found in state")
             return {"messages": []}
 
-        # 创建工具名称到工具实例的映射字典，便于快速查找
+        # Build a name-to-tool map for quick lookup
         tool_map = {tool.name: tool for tool in self.tools}
-        # 初始化结果列表，用于存储所有工具调用的返回消息
+        # Collect all returned tool messages here
         results = []
 
-        # 使用线程池管理并行任务，max_workers控制最大并发线程数
+        # Run tool calls concurrently in a thread pool
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 使用字典推导式提交所有工具调用任务到线程池，返回future到tool_call的映射
+            # Submit all tool calls and map each future back to its tool call
             future_to_tool = {
-                # executor.submit(可调用对象, 参数1, 参数2, ...), 后面参数：依次传给_run_single_tool的参数 tool_call、tool_map
+                # `executor.submit(callable, arg1, arg2, ...)` forwards args to `_run_single_tool`
                 executor.submit(self._run_single_tool, tool_call, tool_map): tool_call
                 for tool_call in tool_calls
             }
-            # 遍历已完成的future对象，按完成顺序收集结果
+            # Collect results in completion order
             for future in as_completed(future_to_tool):
-                # 使用try-except块捕获线程执行中的异常
+                # Catch thread-level execution failures
                 try:
-                    # 获取future的结果，即工具调用的返回消息
+                    # Get the returned `ToolMessage`
                     result = future.result()
-                    # 将结果添加到结果列表
+                    # Append the result
                     results.append(result)
-                # 捕获线程执行失败的异常，记录错误并添加错误消息到结果
+                # Convert unexpected thread failures into error messages
                 except Exception as e:
-                    # 记录工具执行失败的错误日志，包含异常信息
+                    # Log the execution failure
                     logger.error(f"Tool execution failed: {e}")
-                    # 获取失败任务对应的tool_call
+                    # Read the original tool call for this failed future
                     tool_call = future_to_tool[future]
-                    # 创建包含错误信息的ToolMessage并添加到结果列表
+                    # Append an error `ToolMessage`
                     results.append(ToolMessage(
                         content=f"Unexpected error: {str(e)}",
                         tool_call_id=tool_call["id"],
                         name=tool_call.get("name", "unknown")
                     ))
 
-        # 记录日志，表示完成所有工具调用，包含调用数量
+        # Log completion with the number of finished tool calls
         logger.info(f"Completed {len(results)} tool calls")
-        # 返回更新后的状态字典，包含所有工具调用的结果消息
+        # Return the updated state payload
         return {"messages": results}
 
 
-# 定义获取最新问题的辅助函数
+# Helper for retrieving the latest user question
 def get_latest_question(state: MessagesState) -> Optional[str]:
-    """从状态中安全地获取最新用户问题。
+    """Safely retrieve the latest user question from state.
 
     Args:
-        state: 当前对话状态，包含消息历史。
+        state: Current conversation state containing message history.
 
     Returns:
-        Optional[str]: 最新问题的内容，如果无法获取则返回 None。
+        Optional[str]: Latest question content, or `None` if unavailable.
     """
     try:
-        # 检查状态是否包含消息列表且不为空
+        # Validate that state contains a non-empty message list
         if not state.get("messages") or not isinstance(state["messages"], (list, tuple)) or len(state["messages"]) == 0:
             logger.warning("No valid messages found in state for getting latest question")
             return None
 
-        # 从后向前遍历消息，找到最近的 HumanMessage（用户输入）
+        # Walk backward to find the most recent `HumanMessage`
         for message in reversed(state["messages"]):
             if message.__class__.__name__ == "HumanMessage" and hasattr(message, "content"):
                 return message.content
 
-        # 如果没有找到 HumanMessage，返回 None
+        # Return `None` if no `HumanMessage` is found
         logger.info("No HumanMessage found in state")
         return None
 
@@ -294,35 +294,35 @@ def get_latest_question(state: MessagesState) -> Optional[str]:
         return None
 
 
-# 定义线程内的持久化存储消息过滤函数
+# Filter messages kept in thread-local persistence
 def filter_messages(messages: list) -> list:
-    """过滤消息列表，仅保留 AIMessage 和 HumanMessage 类型消息"""
-    # 过滤出 AIMessage 和 HumanMessage 类型的消息
+    """Filter messages and keep only `AIMessage` and `HumanMessage` entries."""
+    # Keep only `AIMessage` and `HumanMessage` instances
     filtered = [msg for msg in messages if msg.__class__.__name__ in ['AIMessage', 'HumanMessage']]
-    # 如果过滤后的消息超过N条，返回最后N条，否则返回过滤后的完整列表
+    # Keep the last N messages when the filtered list grows too large
     return filtered[-5:] if len(filtered) > 5 else filtered
 
 
-# 定义跨线程的持久化存储的存储和过滤函数
+# Store and retrieve cross-thread memory
 def store_memory(question: BaseMessage, config: RunnableConfig, store: BaseStore) -> str:
-    """存储用户输入中的记忆信息。
+    """Store memory-related information from user input.
 
     Args:
-        question: 用户输入的消息。
-        config: 运行时配置。
-        store: 数据存储实例。
+        question: User input message.
+        config: Runtime configuration.
+        store: Data store instance.
 
     Returns:
-        str: 用户相关的记忆信息字符串。
+        str: Memory string related to the current user.
     """
     namespace = ("memories", config["configurable"]["user_id"])
     try:
-        # 统一为字符串，兼容 content 为 list 的多模态消息
+        # Normalize to string to support multimodal messages where `content` is a list
         content_str = question.content if isinstance(question.content, str) else str(question.content)
-        # 在跨线程存储数据库中搜索相关记忆，取前 10 条避免上下文过长
+        # Search related memories and cap them at 10 to avoid excessive context
         raw_memories = store.search(namespace, query=content_str)
         memories = list(raw_memories)[:10] if raw_memories is not None else []
-        # 安全取 value["data"]，避免旧数据缺键或 value 为 None 导致异常
+        # Read `value["data"]` safely to support older or incomplete records
         parts = []
         for d in memories:
             val = d.value if d.value is not None else {}
@@ -331,7 +331,7 @@ def store_memory(question: BaseMessage, config: RunnableConfig, store: BaseStore
                 parts.append(text)
         user_info = "\n".join(parts)
 
-        # 如果包含“记住”，存储新记忆
+        # Store new memory when the user explicitly uses the memory trigger phrase
         if "记住" in content_str:
             memory = escape(content_str)
             store.put(namespace, str(uuid.uuid4()), {"data": memory})
@@ -343,57 +343,57 @@ def store_memory(question: BaseMessage, config: RunnableConfig, store: BaseStore
         return ""
 
 
-# 定义创建处理链的函数
+# Build an LLM processing chain
 def create_chain(llm_chat, template_file: str, structured_output=None):
-    """创建 LLM 处理链，加载提示模板并绑定模型，使用缓存避免重复读取文件。
+    """Create an LLM chain by loading a prompt template and binding the model.
 
     Args:
-        llm_chat: 语言模型实例。
-        template_file: 提示模板文件路径。
-        structured_output: 可选的结构化输出模型。
+        llm_chat: Language model instance.
+        template_file: Prompt template file path.
+        structured_output: Optional structured-output schema.
 
     Returns:
-        Runnable: 配置好的处理链。
+        Runnable: Configured processing chain.
 
     Raises:
-        FileNotFoundError: 如果模板文件不存在。
+        FileNotFoundError: Raised when the template file is missing.
     """
-    # 定义静态缓存和锁（仅在函数第一次调用时初始化）
+    # Initialize static cache and lock on first call only
     if not hasattr(create_chain, "prompt_cache"):
-        # 缓存字典
+        # Prompt cache
         create_chain.prompt_cache = {}
-        # 线程锁 确保缓存的读写是线程安全的
+        # Lock used to keep cache access thread-safe
         create_chain.lock = threading.Lock()
 
     try:
-        # 先检查缓存，无锁访问
+        # Check the cache first without locking
         if template_file in create_chain.prompt_cache:
             prompt_template = create_chain.prompt_cache[template_file]
             logger.info(f"Using cached prompt template for {template_file}")
         else:
-            # 使用锁保护缓存访问
+            # Protect cache writes with a lock
             with create_chain.lock:
-                # 检查缓存中是否已有该模板
+                # Double-check that the template is not already cached
                 if template_file not in create_chain.prompt_cache:
                     logger.info(f"Loading and caching prompt template from {template_file}")
-                    # 从文件加载提示模板并存入缓存
+                    # Load the template from disk and cache it
                     create_chain.prompt_cache[template_file] = PromptTemplate.from_file(template_file, encoding="utf-8")
-                # 从缓存中获取提示模板
+                # Read the template from cache
                 prompt_template = create_chain.prompt_cache[template_file]
 
-        # 创建聊天提示模板，使用模板内容
+        # Build the chat prompt from the template text
         prompt = ChatPromptTemplate.from_messages([("human", prompt_template.template)])
-        # 返回提示模板与LLM的组合链，若有结构化输出则绑定
+        # Return the prompt+LLM chain and bind structured output when needed
         return prompt | (llm_chat.with_structured_output(structured_output) if structured_output else llm_chat)
     except FileNotFoundError:
         logger.error(f"Template file {template_file} not found")
         raise
 
 
-# 数据库重试机制,最多重试3次,指数退避等待2-10秒,仅对数据库操作错误重试
+# Retry database operations up to 3 times with exponential backoff from 2 to 10 seconds
 @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=2, max=10),retry=retry_if_exception_type(OperationalError))
 def test_connection(db_connection_pool: ConnectionPool) -> bool:
-    """测试连接池是否可用"""
+    """Test whether the connection pool is usable."""
     with db_connection_pool.getconn() as conn:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1")
@@ -403,9 +403,9 @@ def test_connection(db_connection_pool: ConnectionPool) -> bool:
     return True
 
 
-# 周期性检查连接池状态，记录可用连接数和异常情况，提前预警
+# Periodically inspect the connection-pool status and emit early warnings
 def monitor_connection_pool(db_connection_pool: ConnectionPool, interval: int = 60):
-    """周期性监控连接池状态"""
+    """Monitor connection-pool status periodically."""
     def _monitor():
         while not db_connection_pool.closed:
             try:
@@ -424,62 +424,62 @@ def monitor_connection_pool(db_connection_pool: ConnectionPool, interval: int = 
     return monitor_thread
 
 
-# 定义 Node agent分诊函数
+# Agent node used for routing/triage
 def agent(state: MessagesState, config: RunnableConfig, *, store: BaseStore, llm_chat, tool_config: ToolConfig) -> dict:
-    """代理函数，根据用户问题决定是否调用工具或结束。
+    """Agent function that decides whether to call tools or finish.
 
     Args:
-        state: 当前对话状态。
-        config: 运行时配置。
-        store: 数据存储实例。
-        llm_chat: Chat模型。
-        tool_config: 工具配置参数。
+        state: Current conversation state.
+        config: Runtime configuration.
+        store: Data store instance.
+        llm_chat: Chat model.
+        tool_config: Tool configuration.
 
     Returns:
-        dict: 更新后的对话状态。
+        dict: Updated conversation state.
     """
-    # 记录代理开始处理查询
+    # Log the start of agent processing
     logger.info("Agent processing user query")
-    # 定义存储命名空间，使用用户ID
+    # Use the user ID as the memory namespace
     namespace = ("memories", config["configurable"]["user_id"])
-    # 尝试执行以下代码块
+    # Execute the agent logic
     try:
-        # 获取最后一条消息即用户问题
+        # Read the latest message as the user question
         question = state["messages"][-1]
         logger.info(f"agent question:{question}")
 
-        # 自定义跨线程持久化存储记忆并获取相关信息
+        # Read and update cross-thread memory
         user_info = store_memory(question, config, store)
-        # 自定义线程内存储逻辑 过滤消息
+        # Filter the in-thread message history
         messages = filter_messages(state["messages"])
 
-        # 将工具绑定到 LLM
+        # Bind tools to the LLM
         llm_chat_with_tool = llm_chat.bind_tools(tool_config.get_tools())
 
-        # 创建代理处理链
+        # Create the agent chain
         agent_chain = create_chain(llm_chat_with_tool, Config.PROMPT_TEMPLATE_TXT_AGENT)
-        # 调用代理链处理消息
+        # Invoke the agent chain
         response = agent_chain.invoke({"question": question,"messages": messages, "userInfo": user_info})
         # logger.info(f"Agent response: {response}")
-        # 返回更新后的对话状态
+        # Return the updated state
         return {"messages": [response]}
-    # 捕获异常
+    # Catch unexpected failures
     except Exception as e:
-        # 记录错误日志
+        # Log the failure
         logger.error(f"Error in agent processing: {e}")
-        # 返回错误消息
+        # Return an error message
         return {"messages": [{"role": "system", "content": "处理请求时出错"}]}
 
 
-# 定义 Node grade_documents相关性评估函数
+# Node that scores document relevance
 def grade_documents(state: MessagesState, llm_chat) -> dict:
-    """评估检索到的文档内容与问题的相关性，并将评分结果存储在状态中。
+    """Score document relevance against the user question and store the result in state.
 
     Args:
-        state: 当前对话状态，包含消息历史。
+        state: Current conversation state containing message history.
 
     Returns:
-        dict: 更新后的状态，包含评分结果。
+        dict: Updated state containing the score.
     """
     logger.info("Grading documents for relevance")
     if not state.get("messages"):
@@ -490,26 +490,26 @@ def grade_documents(state: MessagesState, llm_chat) -> dict:
         }
 
     try:
-        # # 获取用户的最新问题
+        # Get the latest user question
         question = get_latest_question(state)
-        # 获取最后一条消息作为上下文(因为调用工具输出的内容写入到state的最新消息中)
+        # Use the latest message content as context because tool output is written there
         context = state["messages"][-1].content
         # logger.info(f"Evaluating relevance - Question: {question}, Context: {context}")
 
-        # 创建评分处理链
+        # Create the relevance-scoring chain
         grade_chain = create_chain(llm_chat, Config.PROMPT_TEMPLATE_TXT_GRADE, DocumentRelevanceScore)
-        # 调用评分链评估相关性
+        # Run the relevance-scoring chain
         scored_result = grade_chain.invoke({"question": question, "context": context})
         # logger.info(f"scored_result:{scored_result}")
-        # 获取评分结果
+        # Read the score
         score = scored_result.binary_score
         logger.info(f"Document relevance score: {score}")
 
-        # 返回更新后的状态，包括评分结果
+        # Return the updated state with the score
         return {
-            # 保持消息不变
+            # Keep messages unchanged
             "messages": state["messages"],
-            # 存储评分结果
+            # Store the relevance score
             "relevance_score": score
         }
     except (IndexError, KeyError) as e:
@@ -526,230 +526,230 @@ def grade_documents(state: MessagesState, llm_chat) -> dict:
         }
 
 
-# 查询重写
+# Query rewriting
 def rewrite(state: MessagesState, llm_chat) -> dict:
-    """重写用户查询以改进问题。
+    """Rewrite the user query to improve retrieval quality.
 
     Args:
-        state: 当前对话状态。
+        state: Current conversation state.
 
     Returns:
-        dict: 更新后的消息状态。
+        dict: Updated message state.
     """
-    # 记录开始重写查询
+    # Log the start of query rewriting
     logger.info("Rewriting query")
-    # 尝试执行以下代码块
+    # Execute the rewrite logic
     try:
-        # 获取用户的最新问题
+        # Read the latest user question
         question = get_latest_question(state)
-        # 创建重写处理链
+        # Create the rewrite chain
         rewrite_chain = create_chain(llm_chat, Config.PROMPT_TEMPLATE_TXT_REWRITE)
-        # 调用重写链生成新查询
+        # Invoke the chain to generate a rewritten query
         response = rewrite_chain.invoke({"question": question})
         # logger.info(f"rewrite question:{response}")
-        # 重写次数+1
+        # Increment the rewrite counter
         rewrite_count = state.get("rewrite_count", 0) + 1
         logger.info(f"Rewrite count: {rewrite_count}")
-        # 返回更新后的对话状态
+        # Return the updated state
         return {"messages": [response], "rewrite_count": rewrite_count}
-    # 捕获索引或键错误
+    # Catch index/key access errors
     except (IndexError, KeyError) as e:
-        # 记录错误日志
+        # Log the failure
         logger.error(f"Message access error in rewrite: {e}")
-        # 返回错误消息
+        # Return an error message
         return {"messages": [{"role": "system", "content": "无法重写查询"}]}
 
 
-# 定义Node 生成回复函数
+# Node that generates the final answer
 def generate(state: MessagesState, llm_chat) -> dict:
-    """基于工具返回的内容生成最终回复。
+    """Generate the final reply from tool output.
 
     Args:
-        state: 当前对话状态。
+        state: Current conversation state.
 
     Returns:
-        dict: 更新后的消息状态。
+        dict: Updated message state.
     """
-    # 记录开始生成回复
+    # Log the start of answer generation
     logger.info("Generating final response")
-    # 尝试执行以下代码块
+    # Execute the generation logic
     try:
-        # 获取用户的最新问题
+        # Read the latest user question
         question = get_latest_question(state)
-        # 获取最后一条消息作为上下文(因为调用工具输出的内容写入到state的最新消息中)
+        # Use the latest message content as context because tool output is written there
         context = state["messages"][-1].content
         # logger.info(f"generate - Question: {question}, Context: {context}")
-        # 创建生成处理链
+        # Create the generation chain
         generate_chain = create_chain(llm_chat, Config.PROMPT_TEMPLATE_TXT_GENERATE)
-        # 调用生成链生成回复
+        # Invoke the generation chain
         response = generate_chain.invoke({"context": context, "question": question})
-        # 返回更新后的消息状态
+        # Return the updated message state
         return {"messages": [response]}
-    # 捕获索引或键错误
+    # Catch index/key access errors
     except (IndexError, KeyError) as e:
-        # 记录错误日志
+        # Log the failure
         logger.error(f"Message access error in generate: {e}")
-        # 返回错误消息
+        # Return an error message
         return {"messages": [{"role": "system", "content": "无法生成回复"}]}
 
 
-# 定义Edge 根据工具调用的结果动态决定下一步路由
+# Edge router that chooses the next node after tool execution
 def route_after_tools(state: MessagesState, tool_config: ToolConfig) -> Literal["generate", "grade_documents"]:
     """
-    根据工具调用的结果动态决定下一步路由，使用配置字典支持多工具并包含容错处理。
+    Choose the next route dynamically based on tool-call results.
 
     Args:
-        state: 当前对话状态，包含消息历史和可能的工具调用结果。
-        tool_config: 工具配置参数。
+        state: Current conversation state containing message history and possible tool output.
+        tool_config: Tool configuration.
 
     Returns:
-        Literal["generate", "grade_documents"]: 下一步的目标节点。
+        Literal["generate", "grade_documents"]: Target node for the next step.
     """
-    # 检查状态是否包含消息列表，若为空则记录错误并默认路由到 generate
+    # Default to `generate` when the message list is missing or invalid
     if not state.get("messages") or not isinstance(state["messages"], list):
         logger.error("Messages state is empty or invalid, defaulting to generate")
         return "generate"
 
     try:
-        # 获取状态中的最后一条消息，用于判断工具调用来源
+        # Read the last message to identify the tool source
         last_message = state["messages"][-1]
 
-        # 检查消息是否具有 name 属性，若无则路由到 generate
+        # Route to `generate` if the message has no `name`
         if not hasattr(last_message, "name") or last_message.name is None:
             logger.info("Last message has no name attribute, routing to generate")
             return "generate"
 
-        # 检查消息是否来自已注册的工具
+        # Make sure the message came from a registered tool
         tool_name = last_message.name
         if tool_name not in tool_config.get_tool_names():
             logger.info(f"Unknown tool {tool_name}, routing to generate")
             return "generate"
 
-        # 根据配置字典决定路由，若无配置则默认路由到 generate
+        # Use the routing config and default to `generate`
         target = tool_config.get_tool_routing_config().get(tool_name, "generate")
         logger.info(f"Tool {tool_name} routed to {target} based on config")
         return target
 
     except IndexError:
-        # 捕获消息列表为空或索引错误的异常，记录错误并默认路由到 generate
+        # Default to `generate` on empty-message/index errors
         logger.error("No messages available in state, defaulting to generate")
         return "generate"
     except AttributeError:
-        # 捕获消息对象属性访问错误的异常，记录错误并默认路由到 generate
+        # Default to `generate` on invalid message objects
         logger.error("Invalid message object, defaulting to generate")
         return "generate"
     except Exception as e:
-        # 捕获其他未预期的异常，记录详细错误信息并默认路由到 generate
+        # Default to `generate` on any unexpected error
         logger.error(f"Unexpected error in route_after_tools: {e}, defaulting to generate")
         return "generate"
 
 
-# 定义Edge 根据状态中的评分结果决定下一步路由
+# Edge router that chooses the next node after relevance grading
 def route_after_grade(state: MessagesState) -> Literal["generate", "rewrite"]:
     """
-    根据状态中的评分结果决定下一步路由，包含增强的状态校验和容错处理。
+    Choose the next route based on the relevance score with extra validation.
 
     Args:
-        state: 当前对话状态，预期包含 messages 和 relevance_score 字段。
+        state: Current conversation state, expected to contain `messages` and `relevance_score`.
 
     Returns:
-        Literal["generate", "rewrite"]: 下一步的目标节点。
+        Literal["generate", "rewrite"]: Target node for the next step.
     """
-    # 检查状态是否为有效字典，若无效则记录错误并默认路由到 rewrite
+    # Default to `rewrite` when state is not a valid dictionary
     if not isinstance(state, dict):
         logger.error("State is not a valid dictionary, defaulting to rewrite")
         return "rewrite"
 
-    # 检查状态是否包含 messages 字段，若缺失则记录错误并默认路由到 rewrite
+    # Default to `rewrite` when `messages` is missing or invalid
     if "messages" not in state or not isinstance(state["messages"], (list, tuple)):
         logger.error("State missing valid messages field, defaulting to rewrite")
         return "rewrite"
 
-    # 检查 messages 是否为空，若为空则记录警告并默认路由到 rewrite
+    # Default to `rewrite` when the message list is empty
     if not state["messages"]:
         logger.warning("Messages list is empty, defaulting to rewrite")
         return "rewrite"
 
-    # 获取状态中的 relevance_score，若不存在则返回 None
+    # Read the relevance score, defaulting to `None`
     relevance_score = state.get("relevance_score")
-    # 获取状态中的 rewrite_count
+    # Read the rewrite counter
     rewrite_count = state.get("rewrite_count", 0)
     logger.info(f"Routing based on relevance_score: {relevance_score}, rewrite_count: {rewrite_count}")
 
-    # 如果重写次数超过 3 次，强制路由到 generate
+    # Force `generate` after 3 rewrites
     if rewrite_count >= 3:
         logger.info("Max rewrite limit reached, proceeding to generate")
         return "generate"
 
     try:
-        # 检查 relevance_score 是否为有效字符串，若不是则视为无效评分
+        # Treat non-string relevance scores as invalid
         if not isinstance(relevance_score, str):
             logger.warning(f"Invalid relevance_score type: {type(relevance_score)}, defaulting to rewrite")
             return "rewrite"
 
-        # 如果评分结果为 "yes"，表示文档相关，路由到 generate 节点
+        # Route to `generate` when the score is `yes`
         if relevance_score.lower() == "yes":
             logger.info("Documents are relevant, proceeding to generate")
             return "generate"
 
-        # 如果评分结果为 "no" 或其他值（包括空字符串），路由到 rewrite 节点
+        # Route to `rewrite` for `no` or any other value
         logger.info("Documents are not relevant or scoring failed, proceeding to rewrite")
         return "rewrite"
 
     except AttributeError:
-        # 捕获 relevance_score 不支持 lower() 方法的异常（例如 None），默认路由到 rewrite
+        # Default to `rewrite` when `lower()` is not supported
         logger.error("relevance_score is not a string or is None, defaulting to rewrite")
         return "rewrite"
     except Exception as e:
-        # 捕获其他未预期的异常，记录详细错误信息并默认路由到 rewrite
+        # Default to `rewrite` on any unexpected error
         logger.error(f"Unexpected error in route_after_grade: {e}, defaulting to rewrite")
         return "rewrite"
 
 
-# 保存状态图的可视化表示
+# Save a visualization of the state graph
 def save_graph_visualization(graph: StateGraph, filename: str = "graph.png") -> None:
-    """保存状态图的可视化表示。
+    """Save a visualization of the state graph.
 
     Args:
-        graph: 状态图实例。
-        filename: 保存文件路径。
+        graph: State graph instance.
+        filename: Output file path.
     """
-    # 尝试执行以下代码块
+    # Try to render and save the graph visualization
     try:
-        # 以二进制写模式打开文件
+        # Open the target file in binary-write mode
         with open(filename, "wb") as f:
-            # 将状态图转换为Mermaid格式的PNG并写入文件
+            # Render the graph as a Mermaid PNG and write it to disk
             f.write(graph.get_graph().draw_mermaid_png())
-        # 记录保存成功的日志
+        # Log save success
         logger.info(f"Graph visualization saved as {filename}")
-    # 捕获IO错误
+    # Catch file I/O errors
     except IOError as e:
-        # 记录警告日志
+        # Log a warning instead of failing hard
         logger.warning(f"Failed to save graph visualization: {e}")
 
 
-# 创建并配置状态图
+# Create and configure the state graph
 def create_graph(db_connection_pool: ConnectionPool, llm_chat, llm_embedding, tool_config: ToolConfig) -> StateGraph:
-    """创建并配置状态图。
+    """Create and configure the state graph.
 
     Args:
-        db_connection_pool: 数据库连接池。
-        llm_chat: Chat模型。
-        llm_embedding: Embedding模型。
-        tool_config: 工具配置参数。
+        db_connection_pool: Database connection pool.
+        llm_chat: Chat model.
+        llm_embedding: Embedding model.
+        tool_config: Tool configuration.
 
     Returns:
-        StateGraph: 编译后的状态图。
+        StateGraph: Compiled state graph.
 
     Raises:
-        ConnectionPoolError: 如果连接池未正确初始化或状态异常。
+        ConnectionPoolError: Raised when the connection pool is unavailable or invalid.
     """
-    # 检查连接池是否为None或未打开
+    # Validate that the connection pool exists and is open
     if db_connection_pool is None or db_connection_pool.closed:
         logger.error("Connection db_connection_pool is None or closed")
         raise ConnectionPoolError("数据库连接池未初始化或已关闭")
     try:
-        # 获取当前活动连接数和最大连接数
+        # Read the current and maximum connection counts
         active_connections = db_connection_pool.get_stats().get("connections_in_use", 0)
         max_connections = db_connection_pool.max_size
         if active_connections >= max_connections:
@@ -771,103 +771,103 @@ def create_graph(db_connection_pool: ConnectionPool, llm_chat, llm_embedding, to
         logger.error(f"Failed to verify connection db_connection_pool status: {e}")
         raise ConnectionPoolError(f"无法验证连接池状态: {str(e)}") from e
 
-    # 线程内持久化存储
+    # In-thread persistence
     try:
-        # 创建Postgres检查点保存实例  -- 短期记忆
+        # Create the Postgres checkpoint saver for short-term memory
         checkpointer = PostgresSaver(db_connection_pool)
-        # 初始化检查点
+        # Initialize checkpoints
         checkpointer.setup()
     except Exception as e:
         logger.error(f"Failed to setup PostgresSaver: {e}")
         raise ConnectionPoolError(f"检查点初始化失败: {str(e)}")
 
-    # 跨线程持久化存储
+    # Cross-thread persistence
     try:
-        # 创建Postgres存储实例，指定嵌入维度和函数  -- 长期记忆
+        # Create the Postgres store for long-term memory
         store = PostgresStore(db_connection_pool, index={"dims": 1536, "embed": llm_embedding})
         store.setup()
     except Exception as e:
         logger.error(f"Failed to setup PostgresStore: {e}")
         raise ConnectionPoolError(f"存储初始化失败: {str(e)}")
 
-    # 创建状态图实例，使用MessagesState作为状态类型
+    # Create the workflow graph with `MessagesState`
     workflow = StateGraph(MessagesState)
-    # 添加代理节点
+    # Add the agent node
     workflow.add_node("agent", lambda state, config: agent(state, config, store=store, llm_chat=llm_chat, tool_config=tool_config))
-    # 添加工具节点，使用并行工具节点
+    # Add the parallel tool node
     workflow.add_node("call_tools", ParallelToolNode(tool_config.get_tools(), max_workers=5))
-    # 添加重写节点
+    # Add the rewrite node
     workflow.add_node("rewrite", lambda state: rewrite(state,llm_chat=llm_chat))
-    # 添加生成节点
+    # Add the generate node
     workflow.add_node("generate", lambda state: generate(state, llm_chat=llm_chat))
-    # 添加文档相关性评分节点
+    # Add the document-relevance grading node
     workflow.add_node("grade_documents", lambda state: grade_documents(state, llm_chat=llm_chat))
 
-    # 添加从起始到代理的边
+    # Add the edge from `START` to `agent`
     workflow.add_edge(START, end_key="agent")
-    # 添加代理的条件边，根据工具调用的工具名称决定下一步路由
+    # Add conditional edges after `agent` based on tool usage
     workflow.add_conditional_edges(source="agent", path=tools_condition, path_map={"tools": "call_tools", END: END})
-    # 添加检索的条件边，根据工具调用的结果动态决定下一步路由
+    # Add conditional edges after tool execution
     workflow.add_conditional_edges(source="call_tools", path=lambda state: route_after_tools(state, tool_config),path_map={"generate": "generate", "grade_documents": "grade_documents"})
-    # 添加检索的条件边，根据状态中的评分结果决定下一步路由
+    # Add conditional edges after relevance grading
     workflow.add_conditional_edges(source="grade_documents", path=route_after_grade, path_map={"generate": "generate", "rewrite": "rewrite"})
-    # 添加从生成到结束的边
+    # Add the edge from `generate` to `END`
     workflow.add_edge(start_key="generate", end_key=END)
-    # 添加从重写到代理的边
+    # Add the edge from `rewrite` back to `agent`
     workflow.add_edge(start_key="rewrite", end_key="agent")
 
-    # 编译状态图，绑定检查点和存储
+    # Compile the graph with checkpointing and storage
     return workflow.compile(checkpointer=checkpointer, store=store)
 
 
-# 定义响应函数
+# Response helper for CLI/console usage
 def graph_response(graph: StateGraph, user_input: str, config: dict, tool_config: ToolConfig) -> None:
-    """处理用户输入并输出响应，区分工具输出和大模型输出，支持多工具。
+    """Process user input and print either tool output or LLM output.
 
     Args:
-        graph: 状态图实例。
-        user_input: 用户输入。
-        config: 运行时配置。
+        graph: State graph instance.
+        user_input: User input text.
+        config: Runtime configuration.
     """
     try:
-        # 启动状态图流处理用户输入
+        # Start streaming events from the graph
         events = graph.stream({"messages": [{"role": "user", "content": user_input}], "rewrite_count": 0}, config)
-        # 遍历事件流
+        # Iterate through the event stream
         for event in events:
-            # 遍历事件中的值
+            # Iterate through event values
             for value in event.values():
-                # 检查是否有有效消息
+                # Skip invalid message payloads
                 if "messages" not in value or not isinstance(value["messages"], list):
                     logger.warning("No valid messages in response")
                     continue
 
-                # 获取最后一条消息
+                # Read the last message
                 last_message = value["messages"][-1]
 
-                # 检查消息是否包含工具调用
+                # Detect tool calls
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                    # 遍历工具调用
+                    # Iterate over tool calls
                     for tool_call in last_message.tool_calls:
-                        # 检查工具调用是否为字典且包含名称
+                        # Validate the tool-call payload
                         if isinstance(tool_call, dict) and "name" in tool_call:
-                            # 记录工具调用日志
+                            # Log the tool call
                             logger.info(f"Calling tool: {tool_call['name']}")
-                    # 跳过本次循环
+                    # Skip to the next event
                     continue
 
-                # 检查消息是否有内容
+                # Check whether the message has content
                 if hasattr(last_message, "content"):
                     content = last_message.content
 
-                    # 情况1：工具输出（动态检查工具名称）
+                    # Case 1: tool output
                     if hasattr(last_message, "name") and last_message.name in tool_config.get_tool_names():
                         tool_name = last_message.name
                         print(f"Tool Output [{tool_name}]: {content}")
-                    # 情况2：大模型输出（非工具消息）
+                    # Case 2: normal LLM output
                     else:
                         print(f"Assistant: {content}")
                 else:
-                    # 如果消息没有内容，可能是中间状态
+                    # Messages with no content may represent intermediate state
                     logger.info("Message has no content, skipping")
                     print("Assistant: 未获取到相关回复")
     except ValueError as ve:
@@ -878,27 +878,27 @@ def graph_response(graph: StateGraph, user_input: str, config: dict, tool_config
         print("Assistant: 处理响应时发生未知错误")
 
 
-# 定义主函数
+# Main entry point
 def main():
-    """主函数，初始化并运行聊天机器人。"""
-    # 初始化连接池为None
+    """Initialize and run the chatbot."""
+    # Initialize the connection pool as `None`
     db_connection_pool = None
     try:
-        # 调用get_llm函数初始化Chat模型实例和Embedding模型实例
+        # Initialize the chat and embedding models
         llm_chat, llm_embedding = get_llm(Config.LLM_TYPE)
 
-        # 获取工具列表
+        # Get the tool list
         tools = get_tools(llm_embedding)
 
-        # 创建 ToolConfig 实例
+        # Create the `ToolConfig` instance
         tool_config = ToolConfig(tools)
 
-        # 定义数据库连接参数，自动提交且无预准备阈值，5秒超时
+        # Connection settings: autocommit, no prepare threshold, 5-second connect timeout
         connection_kwargs = {"autocommit": True, "prepare_threshold": 0, "connect_timeout": 5}
-        # 创建数据库连接池，最大连接数20,最小保持2个活跃连接,从池中获取连接的最大等待时间10秒
+        # Create the connection pool with max 20, min 2, and a 10-second wait timeout
         db_connection_pool = ConnectionPool(conninfo=Config.DB_URI, max_size=20, min_size=2, kwargs=connection_kwargs, timeout=10)
 
-        # 打开连接池
+        # Open the connection pool
         try:
             db_connection_pool.open()
             logger.info("Database connection pool initialized")
@@ -907,10 +907,10 @@ def main():
             logger.error(f"Failed to open connection pool: {e}")
             raise ConnectionPoolError(f"无法打开数据库连接池: {str(e)}")
 
-        # 启动连接池监控 监控线程为守护线程，随主程序退出而停止
+        # Start the connection-pool monitor as a daemon thread
         monitor_thread = monitor_connection_pool(db_connection_pool, interval=60)
 
-        # 创建状态图
+        # Create the state graph
         try:
             graph = create_graph(db_connection_pool, llm_chat, llm_embedding, tool_config)
         except ConnectionPoolError as e:
@@ -918,54 +918,54 @@ def main():
             print(f"错误: {e}")
             sys.exit(1)
 
-        # 保存状态图可视化（可选项，生成要注释掉）
+        # Save the graph visualization
         save_graph_visualization(graph)
 
-        # 打印机器人就绪提示
+        # Print the ready message
         print("聊天机器人准备就绪！输入 'quit'、'exit' 或 'q' 结束对话。")
-        # 定义运行时配置，包含线程ID和用户ID
+        # Runtime configuration with thread and user IDs
         config = {"configurable": {"thread_id": "1", "user_id": "1"}}
-        # 进入主循环
+        # Enter the main loop
         while True:
-            # 获取用户输入并去除首尾空格
+            # Read user input and trim whitespace
             user_input = input("User: ").strip()
-            # 检查是否退出
+            # Exit when the user enters a quit command
             if user_input.lower() in {"quit", "exit", "q"}:
                 print("拜拜!")
                 break
-            # 检查输入是否为空
+            # Skip empty input
             if not user_input:
                 print("请输入聊天内容！")
                 continue
-            # 处理用户输入并选择是否流式输出响应
+            # Process the user input and stream/print the response
             graph_response(graph, user_input, config, tool_config)
 
     except ConnectionPoolError as e:
-        # 捕获连接池相关的异常
+        # Catch connection-pool-related errors
         logger.error(f"Connection pool error: {e}")
         print(f"错误: 数据库连接池问题 - {e}")
         sys.exit(1)
     except RuntimeError as e:
-        # 捕获其他运行时错误
+        # Catch other runtime errors
         logger.error(f"Initialization error: {e}")
         print(f"错误: 初始化失败 - {e}")
         sys.exit(1)
     except KeyboardInterrupt:
-        # 捕获键盘中断
+        # Catch keyboard interruption
         print("\n被用户打断。再见！")
     except Exception as e:
-        # 捕获未预期的其他异常
+        # Catch any other unexpected errors
         logger.error(f"Unexpected error: {e}")
         print(f"错误: 发生未知错误 - {e}")
         sys.exit(1)
     finally:
-        # 清理资源
+        # Clean up resources
         if db_connection_pool and not db_connection_pool.closed:
             db_connection_pool.close()
             logger.info("Database connection pool closed")
 
 
-# 检查是否为主模块运行
+# Run `main()` when executed as the entry module
 if __name__ == "__main__":
-    # 调用主函数
+    # Call the main function
     main()

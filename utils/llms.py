@@ -3,12 +3,12 @@ import logging
 from langchain_openai import ChatOpenAI,OpenAIEmbeddings
 
 
-# 设置日志模版
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-# 模型配置字典
+# Model configuration mapping
 MODEL_CONFIGS = {
     "openai": {
         "base_url": os.getenv("OPENAI_BASE_URL"),
@@ -23,7 +23,7 @@ MODEL_CONFIGS = {
         "embedding_model": "text-embedding-v1"
     },
     "oneapi": {
-        "base_url": os.getenv("ONEAPI_API_BASE", ""),  # 使用 OneAPI 时请在 .env 中配置 ONEAPI_API_BASE
+        "base_url": os.getenv("ONEAPI_API_BASE", ""),  # Configure `ONEAPI_API_BASE` in `.env` when using OneAPI
         "api_key": os.getenv("ONEAPI_API_KEY"),
         "chat_model": "qwen-max",
         "embedding_model": "text-embedding-v1"
@@ -37,48 +37,48 @@ MODEL_CONFIGS = {
 }
 
 
-# 默认配置
+# Default settings
 DEFAULT_LLM_TYPE = "qwen"
 DEFAULT_TEMPERATURE = 0.0
 
 
 class LLMInitializationError(Exception):
-    """自定义异常类用于LLM初始化错误"""
+    """Custom exception raised for LLM initialization errors."""
     pass
 
 
 def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> tuple[ChatOpenAI, OpenAIEmbeddings]:
     """
-    初始化LLM实例
+    Initialize an LLM instance.
 
     Args:
-        llm_type (str): LLM类型，可选值为 'openai', 'oneapi', 'qwen', 'ollama'
+        llm_type (str): LLM type. Supported values: `openai`, `oneapi`, `qwen`, `ollama`.
 
     Returns:
-        ChatOpenAI: 初始化后的LLM实例
+        ChatOpenAI: Initialized chat model instance.
 
     Raises:
-        LLMInitializationError: 当LLM初始化失败时抛出
+        LLMInitializationError: Raised when LLM initialization fails.
     """
     try:
-        # 检查llm_type是否有效
+        # Validate the requested LLM type
         if llm_type not in MODEL_CONFIGS:
             raise ValueError(f"不支持的LLM类型: {llm_type}. 可用的类型: {list(MODEL_CONFIGS.keys())}")
 
         config = MODEL_CONFIGS[llm_type]
 
-        # 特殊处理 ollama 类型
+        # Apply Ollama-specific handling
         if llm_type == "ollama":
             os.environ["OPENAI_API_KEY"] = "NA"
 
-        # 创建LLM实例
+        # Create the chat model instance
         llm_chat = ChatOpenAI(
             base_url=config["base_url"],
             api_key=config["api_key"],
             model=config["chat_model"],
             temperature=DEFAULT_TEMPERATURE,
-            timeout=30,  # 添加超时配置（秒）
-            max_retries=2  # 添加重试次数
+            timeout=30,  # Request timeout in seconds
+            max_retries=2  # Number of retries
         )
 
         llm_embedding = OpenAIEmbeddings(
@@ -102,13 +102,13 @@ def initialize_llm(llm_type: str = DEFAULT_LLM_TYPE) -> tuple[ChatOpenAI, OpenAI
 
 def get_llm(llm_type: str = DEFAULT_LLM_TYPE) -> ChatOpenAI:
     """
-    获取LLM实例的封装函数，提供默认值和错误处理
+    Wrapper for retrieving an LLM instance with defaults and error handling.
 
     Args:
-        llm_type (str): LLM类型
+        llm_type (str): LLM type.
 
     Returns:
-        ChatOpenAI: LLM实例
+        ChatOpenAI: LLM instance.
     """
     try:
         return initialize_llm(llm_type)
@@ -116,17 +116,17 @@ def get_llm(llm_type: str = DEFAULT_LLM_TYPE) -> ChatOpenAI:
         logger.warning(f"使用默认配置重试: {str(e)}")
         if llm_type != DEFAULT_LLM_TYPE:
             return initialize_llm(DEFAULT_LLM_TYPE)
-        raise  # 如果默认配置也失败，则抛出异常
+        raise  # Re-raise if the default configuration also fails
 
 
-# 示例使用
+# Example usage
 if __name__ == "__main__":
     try:
-        # 测试不同类型的LLM初始化
+        # Test initialization for different LLM types
         # llm_openai = get_llm("openai")
         llm_qwen = get_llm("qwen")
 
-        # 测试无效类型
+        # Test an invalid type
         # llm_invalid = get_llm("invalid_type")
     except LLMInitializationError as e:
         logger.error(f"程序终止: {str(e)}")

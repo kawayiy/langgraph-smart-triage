@@ -3,7 +3,7 @@ import json
 import logging
 
 
-# 设置日志模版
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -12,18 +12,18 @@ url = "http://localhost:8013/v1/chat/completions"
 headers = {"Content-Type": "application/json"}
 
 
-# 默认非流式输出 True or False
+# Default to non-streaming output: `True` or `False`
 stream_flag = False
 
 
-# input_text = "你好"
+# input_text = "Hello"
 # input_text = "3*4"
 input_text = "查询张三九的健康档案信息"
-# input_text = "查询钱七的健康档案信息"
+# input_text = "Query Qian Qi's health record"
 
 
 
-# 封装请求的参数
+# Build the request payload
 data = {
     "messages": [{"role": "user", "content": input_text}],
     "stream": stream_flag,
@@ -31,7 +31,7 @@ data = {
     "conversationId":"8010"
 }
 
-# 接收流式输出处理
+# Handle streaming responses
 if stream_flag:
     full_response = ""
     try:
@@ -39,11 +39,11 @@ if stream_flag:
             for line in response.iter_lines():
                 if line:
                     json_str = line.decode('utf-8').strip("data: ")
-                    # 检查是否为空或不合法的字符串
+                    # Skip empty or invalid strings
                     if not json_str:
                         logger.info(f"收到空字符串，跳过...")
                         continue
-                    # 确保字符串是有效的JSON格式
+                    # Make sure the payload is valid JSON
                     if json_str.startswith('{') and json_str.endswith('}'):
                         try:
                             data = json.loads(json_str)
@@ -61,10 +61,10 @@ if stream_flag:
     except Exception as e:
         logger.error(f"Error occurred: {e}")
 
-# 接收非流式输出处理
+# Handle non-streaming responses
 else:
-    # 发送post请求
+    # Send a POST request
     response = requests.post(url, headers=headers, data=json.dumps(data))
-    # logger.info(f"接收到返回的响应原始内容: {response.json()}\n")
+    # logger.info(f"Raw response payload: {response.json()}\n")
     content = response.json()['choices'][0]['message']['content']
     logger.info(f"响应内容是: {content}\n")

@@ -1,32 +1,32 @@
-# 导入操作系统接口模块，用于处理文件路径和环境变量
+# Import OS interfaces for paths and environment variables
 import os
-# 用于正则表达式匹配和处理字符串
+# Used for regular-expression matching and string processing
 import re
-# 用于JSON数据的序列化和反序列化
+# Used for JSON serialization and deserialization
 import json
-# 用于定义异步上下文管理器
+# Used to define an asynchronous context manager
 from contextlib import asynccontextmanager
-# 用于类型提示，定义列表和可选参数
+# Used for type hints such as lists and optional values
 from typing import List, Tuple
-# 用于创建Web应用和处理HTTP异常
+# Used to create the web app and handle HTTP exceptions
 from fastapi import FastAPI, HTTPException, Depends
-# 用于返回JSON和流式响应
+# Used to return JSON and streaming responses
 from fastapi.responses import JSONResponse, StreamingResponse
-# 用于运行FastAPI应用
+# Used to run the FastAPI application
 import uvicorn
-# 导入日志模块，用于记录程序运行时的信息
+# Import the logging module for runtime logs
 import logging
 from concurrent_log_handler import ConcurrentRotatingFileHandler
-# 导入系统模块，用于处理系统相关的操作，如退出程序
+# Import the system module for system-level operations such as exiting
 import sys
 import time
-# 导入UUID模块，用于生成唯一标识符
+# Import the UUID module for generating unique identifiers
 import uuid
-# 从typing模块导入类型提示工具
+# Import typing utilities
 from typing import Optional
-# 导入Pydantic的基类和字段定义工具
+# Import Pydantic base classes and field helpers
 from pydantic import BaseModel, Field
-# 从自定义的库中引入函数
+# Import helpers from the local project
 from ragAgent import (
     ToolConfig,
     create_graph,
@@ -40,27 +40,27 @@ from ragAgent import (
 )
 
 
-# 设置LangSmith环境变量 进行应用跟踪，实时了解应用中的每一步发生了什么
+# Optional LangSmith environment variables for tracing application steps
 # os.environ["LANGCHAIN_TRACING_V2"] = "true"
 # os.environ["LANGCHAIN_API_KEY"] = ""
 
 
-# 设置日志基本配置，级别为DEBUG或INFO
+# Configure logging at DEBUG or INFO level
 logger = logging.getLogger(__name__)
-# 设置日志器级别为DEBUG
+# Set the logger level to DEBUG
 logger.setLevel(logging.DEBUG)
 # logger.setLevel(logging.INFO)
-logger.handlers = []  # 清空默认处理器
-# 使用ConcurrentRotatingFileHandler
+logger.handlers = []  # Clear default handlers
+# Use `ConcurrentRotatingFileHandler`
 handler = ConcurrentRotatingFileHandler(
-    # 日志文件
+    # Log file
     Config.LOG_FILE,
-    # 日志文件最大允许大小为5MB，达到上限后触发轮转
+    # Rotate when the log file reaches 5 MB
     maxBytes = Config.MAX_BYTES,
-    # 在轮转时，最多保留3个历史日志文件
+    # Keep at most 3 historical log files
     backupCount = Config.BACKUP_COUNT
 )
-# 设置处理器级别为DEBUG
+# Set the handler level to DEBUG
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -68,26 +68,26 @@ handler.setFormatter(logging.Formatter(
 logger.addHandler(handler)
 
 
-# 定义消息类，用于封装API接口返回数据
-# 定义Message类
+# Message model used to wrap API response data
+# Define the `Message` class
 class Message(BaseModel):
     role: str
     content: str
 
-# 定义ChatCompletionRequest类
+# Define the `ChatCompletionRequest` class
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
     stream: Optional[bool] = False
     userId: Optional[str] = None
     conversationId: Optional[str] = None
 
-# 定义ChatCompletionResponseChoice类
+# Define the `ChatCompletionResponseChoice` class
 class ChatCompletionResponseChoice(BaseModel):
     index: int
     message: Message
     finish_reason: Optional[str] = None
 
-# 定义ChatCompletionResponse类
+# Define the `ChatCompletionResponse` class
 class ChatCompletionResponse(BaseModel):
     id: str = Field(default_factory=lambda: f"chatcmpl-{uuid.uuid4().hex}")
     object: str = "chat.completion"
@@ -97,74 +97,74 @@ class ChatCompletionResponse(BaseModel):
 
 
 def format_response(response):
-    """对输入的文本进行段落分隔、添加适当的换行符，以及在代码块中增加标记，以便生成更具可读性的输出。
+    """Split the input text into paragraphs, add line breaks, and preserve code blocks for better readability.
 
     Args:
-        response: 输入的文本。
+        response: Input text.
 
     Returns:
-        具有清晰段落分隔的文本。
+        Text with clearer paragraph separation.
     """
-    # 使用正则表达式 \n{2, }将输入的response按照两个或更多的连续换行符进行分割。这样可以将文本分割成多个段落，每个段落由连续的非空行组成
+    # Split the input on two or more consecutive newlines to form paragraphs
     paragraphs = re.split(r'\n{2,}', response)
-    # 空列表，用于存储格式化后的段落
+    # List used to collect formatted paragraphs
     formatted_paragraphs = []
-    # 遍历每个段落进行处理
+    # Process each paragraph one by one
     for para in paragraphs:
-        # 检查段落中是否包含代码块标记
+        # Check whether the paragraph contains code fences
         if '```' in para:
-            # 将段落按照```分割成多个部分，代码块和普通文本交替出现
+            # Split on ``` so code blocks and plain text alternate
             parts = para.split('```')
             for i, part in enumerate(parts):
-                # 检查当前部分的索引是否为奇数，奇数部分代表代码块
-                if i % 2 == 1:  # 这是代码块
-                    # 将代码块部分用换行符和```包围，并去除多余的空白字符
+                # Odd-numbered parts represent code blocks
+                if i % 2 == 1:  # This part is a code block
+                    # Wrap the code block with line breaks and trim extra whitespace
                     parts[i] = f"\n```\n{part.strip()}\n```\n"
-            # 将分割后的部分重新组合成一个字符串
+            # Recombine the split parts into a single string
             para = ''.join(parts)
         else:
-            # 否则，将句子中的句点后面的空格替换为换行符，以便句子之间有明确的分隔
+            # Otherwise, replace ". " with a newline to separate sentences
             para = para.replace('. ', '.\n')
-        # 将格式化后的段落添加到formatted_paragraphs列表
-        # strip()方法用于移除字符串开头和结尾的空白字符（包括空格、制表符 \t、换行符 \n等）
+        # Append the cleaned paragraph to `formatted_paragraphs`
+        # `strip()` removes leading and trailing whitespace characters
         formatted_paragraphs.append(para.strip())
-    # 将所有格式化后的段落用两个换行符连接起来，以形成一个具有清晰段落分隔的文本
+    # Join formatted paragraphs with blank lines between them
     return '\n\n'.join(formatted_paragraphs)
 
 
-# 管理 FastAPI 应用生命周期的异步上下文管理器，负责启动和关闭时的初始化与清理
+# Async context manager for startup and shutdown initialization/cleanup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    管理 FastAPI 应用生命周期的异步上下文管理器，负责启动和关闭时的初始化与清理。
+    Manage FastAPI application startup and shutdown tasks.
 
     Args:
-        app (FastAPI): FastAPI 应用实例。
+        app (FastAPI): FastAPI application instance.
 
     Yields:
-        None: 在 yield 前完成初始化，yield 后执行清理。
+        None: Initialization happens before `yield`, cleanup after it.
 
     Raises:
-        ConnectionPoolError: 数据库连接池初始化或操作失败时抛出。
-        Exception: 其他未预期的异常。
+        ConnectionPoolError: Raised when connection-pool initialization or operations fail.
+        Exception: Raised for any other unexpected errors.
     """
-    # 声明全局变量 graph 和 tool_config
+    # Declare the shared `graph` and `tool_config`
     global graph, tool_config
-    # 初始化数据库连接池为 None
+    # Initialize the database connection pool as `None`
     db_connection_pool = None
     try:
-        # 调用 get_llm 初始化聊天模型和嵌入模型
+        # Initialize the chat model and embedding model
         llm_chat, llm_embedding = get_llm(Config.LLM_TYPE)
 
-        # 获取工具列表，基于嵌入模型
+        # Build the tool list from the embedding model
         tools = get_tools(llm_embedding)
 
-        # 创建工具配置实例
+        # Create the tool configuration instance
         tool_config = ToolConfig(tools)
 
-        # 定义数据库连接参数：自动提交、无预准备阈值、单次连接超时 10 秒
+        # Database connection settings: autocommit, no prepare threshold, 10-second connect timeout
         connection_kwargs = {"autocommit": True, "prepare_threshold": 0, "connect_timeout": 10}
-        # 创建数据库连接池：最大20个连接，最小2个活跃连接，获取连接等待超时 30 秒
+        # Create a pool with up to 20 connections, at least 2 active, and a 30-second wait timeout
         db_connection_pool = ConnectionPool(
             conninfo=Config.DB_URI,
             max_size=20,
@@ -173,136 +173,136 @@ async def lifespan(app: FastAPI):
             timeout=30
         )
 
-        # 尝试打开数据库连接池
+        # Try to open the database connection pool
         try:
-            # 打开连接池以启用数据库连接
+            # Open the pool so connections become available
             db_connection_pool.open()
-            # 记录连接池初始化成功的日志（INFO 级别）
+            # Log pool initialization success at INFO level
             logger.info("Database connection pool initialized")
-            # 记录详细调试日志（DEBUG 级别）
+            # Log detailed initialization info at DEBUG level
             logger.debug("Database connection pool initialized")
         except Exception as e:
-            # 记录连接池打开失败的错误日志
+            # Log a pool-open failure
             logger.error(f"Failed to open connection pool: {e}")
-            # 抛出自定义连接池异常
+            # Raise the custom connection-pool exception
             raise ConnectionPoolError(f"无法打开数据库连接池: {str(e)}")
 
-        # 启动连接池监控线程，60秒检查一次，设置为守护线程
+        # Start the pool monitor thread and check every 60 seconds
         monitor_thread = monitor_connection_pool(db_connection_pool, interval=60)
 
-        # 尝试创建状态图
+        # Try to create the state graph
         try:
-            # 使用数据库连接池和模型创建状态图
+            # Create the graph with the database pool and models
             graph = create_graph(db_connection_pool, llm_chat, llm_embedding, tool_config)
         except ConnectionPoolError as e:
-            # 记录状态图创建失败的错误日志
+            # Log graph-creation failure
             logger.error(f"Graph creation failed: {e}")
-            # 退出程序，返回状态码 1
+            # Exit with status code 1
             sys.exit(1)
 
-        # 保存状态图的可视化表示
+        # Save the graph visualization
         save_graph_visualization(graph)
 
     except ConnectionPoolError as e:
-        # 捕获并记录连接池相关异常
+        # Catch and log connection-pool errors
         logger.error(f"Connection pool error: {e}")
-        # 退出程序，返回状态码 1
+        # Exit with status code 1
         sys.exit(1)
     except Exception as e:
-        # 捕获并记录其他未预期的异常
+        # Catch and log unexpected errors
         logger.error(f"Unexpected error: {e}")
-        # 退出程序，返回状态码 1
+        # Exit with status code 1
         sys.exit(1)
 
-    # yield 表示应用运行期间，初始化完成后进入运行状态
+    # `yield` hands control back while the application is running
     yield
-    # 检查并关闭数据库连接池（清理资源）
+    # Close the database connection pool during cleanup
     if db_connection_pool and not db_connection_pool.closed:
-        # 关闭连接池
+        # Close the pool
         db_connection_pool.close()
-        # 记录连接池关闭的日志
+        # Log pool shutdown
         logger.info("Database connection pool closed")
-    # 记录服务关闭的日志
+    # Log service shutdown
     logger.info("The service has been shut down")
 
-# 创建 FastAPI 实例, lifespan参数用于在应用程序生命周期的开始和结束时执行一些初始化或清理工作
+# Create the FastAPI app; `lifespan` runs initialization and cleanup hooks
 app = FastAPI(lifespan=lifespan)
 
 
-# 处理非流式响应的异步函数，生成并返回完整的响应内容
+# Handle non-streaming responses and return the full payload
 async def handle_non_stream_response(user_input, graph, tool_config, config):
     """
-    处理非流式响应的异步函数，生成并返回完整的响应内容。
+    Handle a non-streaming response and return the complete payload.
 
     Args:
-        user_input (str): 用户输入的内容。
-        graph: 图对象，用于处理消息流。
-        tool_config: 工具配置对象，包含可用工具的名称和定义。
-        config (dict): 配置参数，包含线程和用户标识。
+        user_input (str): User input text.
+        graph: Graph object used to process the message flow.
+        tool_config: Tool configuration object containing available tools.
+        config (dict): Runtime config containing thread and user identifiers.
 
     Returns:
-        JSONResponse: 包含格式化响应的 JSON 响应对象。
+        JSONResponse: JSON response containing the formatted output.
     """
-    # 初始化 content 变量，用于存储最终响应内容
+    # Hold the final response content
     content = None
     try:
-        # 启动 graph.stream 处理用户输入，生成事件流
+        # Start `graph.stream` to process the user input as an event stream
         events = graph.stream({"messages": [{"role": "user", "content": user_input}], "rewrite_count": 0}, config)
-        # 遍历事件流中的每个事件
+        # Iterate over each event in the stream
         for event in events:
-            # 遍历事件中的所有值
+            # Iterate over each value in the event
             for value in event.values():
-                # 检查事件值是否包含有效消息列表
+                # Skip invalid message payloads
                 if "messages" not in value or not isinstance(value["messages"], list):
-                    # 记录警告日志，跳过无效消息
+                    # Log and skip invalid messages
                     logger.warning("No valid messages in response")
                     continue
 
-                # 获取消息列表中的最后一条消息
+                # Read the last message in the list
                 last_message = value["messages"][-1]
 
-                # 检查消息是否包含工具调用
+                # Detect tool calls in the message
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                    # 遍历所有工具调用
+                    # Iterate over all tool calls
                     for tool_call in last_message.tool_calls:
-                        # 验证工具调用是否为字典且包含名称
+                        # Ensure the tool call is a dict with a name
                         if isinstance(tool_call, dict) and "name" in tool_call:
-                            # 记录工具调用日志
+                            # Log the tool call
                             logger.info(f"Calling tool: {tool_call['name']}")
-                    # 跳过本次循环，继续处理下一事件
+                    # Skip to the next event
                     continue
 
-                # 检查消息是否包含内容
+                # Check whether the message contains content
                 if hasattr(last_message, "content"):
-                    # 将消息内容赋值给 content
+                    # Save the message content
                     content = last_message.content
 
-                    # 检查是否为工具输出（基于工具名称）
+                    # Detect tool output by checking the tool name
                     if hasattr(last_message, "name") and last_message.name in tool_config.get_tool_names():
-                        # 获取工具名称
+                        # Read the tool name
                         tool_name = last_message.name
-                        # 记录工具输出日志
+                        # Log the tool output
                         logger.info(f"Tool Output [{tool_name}]: {content}")
-                    # 处理大模型输出（非工具消息）
+                    # Handle normal LLM output
                     else:
-                        # 记录最终响应日志
+                        # Log the final response
                         logger.info(f"Final Response is: {content}")
                 else:
-                    # 记录无内容的消息日志，跳过处理
+                    # Log and skip messages with no content
                     logger.info("Message has no content, skipping")
     except ValueError as ve:
-        # 捕获并记录值错误
+        # Catch and log value errors
         logger.error(f"Value error in response processing: {ve}")
     except Exception as e:
-        # 捕获并记录其他未预期的异常
+        # Catch and log unexpected errors
         logger.error(f"Error processing response: {e}")
 
-    # 格式化响应内容，若无内容则返回默认值
+    # Format the response or fall back to a default value
     formatted_response = str(format_response(content)) if content else "No response generated"
-    # 记录格式化后的响应日志
+    # Log the formatted response
     logger.info(f"Results for Formatting: {formatted_response}")
 
-    # 构造返回给客户端的响应对象
+    # Build the response object returned to the client
     try:
         response = ChatCompletionResponse(
             choices=[
@@ -314,9 +314,9 @@ async def handle_non_stream_response(user_input, graph, tool_config, config):
             ]
         )
     except Exception as resp_error:
-        # 捕获并记录构造响应对象时的异常
+        # Catch and log response-construction errors
         logger.error(f"Error creating response object: {resp_error}")
-        # 构造错误响应对象
+        # Build a fallback error response
         response = ChatCompletionResponse(
             choices=[
                 ChatCompletionResponseChoice(
@@ -327,84 +327,84 @@ async def handle_non_stream_response(user_input, graph, tool_config, config):
             ]
         )
 
-    # 记录发送给客户端的响应内容日志
+    # Log the response payload sent to the client
     logger.info(f"Send response content: \n{response}")
-    # 返回 JSON 格式的响应对象
+    # Return the JSON response
     return JSONResponse(content=response.model_dump())
 
 
-# 处理流式响应的异步函数，生成并返回流式数据
+# Handle streaming responses and return SSE output
 async def handle_stream_response(user_input, graph, config):
     """
-    处理流式响应的异步函数，生成并返回流式数据。
+    Handle a streaming response and return SSE output.
 
     Args:
-        user_input (str): 用户输入的内容。
-        graph: 图对象，用于处理消息流。
-        config (dict): 配置参数，包含线程和用户标识。
+        user_input (str): User input text.
+        graph: Graph object used to process the message flow.
+        config (dict): Runtime config containing thread and user identifiers.
 
     Returns:
-        StreamingResponse: 流式响应对象，媒体类型为 text/event-stream。
+        StreamingResponse: Streaming response with media type `text/event-stream`.
     """
     async def generate_stream():
         """
-        内部异步生成器函数，用于产生流式响应数据。
+        Internal async generator that yields streaming response data.
 
         Yields:
-            str: 流式数据块，格式为 SSE (Server-Sent Events)。
+            str: Streaming data chunk in SSE (Server-Sent Events) format.
 
         Raises:
-            Exception: 流生成过程中可能抛出的异常。
+            Exception: Any exception raised during stream generation.
         """
         try:
-            # 生成唯一的 chunk ID
+            # Generate a unique chunk ID
             chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
-            # 调用 graph.stream 获取消息流
+            # Stream message chunks from the graph
             stream_data = graph.stream(
                 {"messages": [{"role": "user", "content": user_input}], "rewrite_count": 0},
                 config,
                 stream_mode="messages"
             )
-            # 遍历消息流中的每个数据块
+            # Iterate over each streamed message chunk
             for message_chunk, metadata in stream_data:
                 try:
-                    # 获取当前节点名称
+                    # Read the current node name
                     node_name = metadata.get("langgraph_node") if metadata else None
-                    # 仅处理 generate 和 agent 节点
+                    # Only process the `generate` and `agent` nodes
                     if node_name in ["generate", "agent"]:
-                        # 获取消息内容，默认空字符串
+                        # Read the chunk content, defaulting to an empty string
                         chunk = getattr(message_chunk, 'content', '')
-                        # 记录流式数据块日志
+                        # Log the streaming chunk
                         logger.info(f"Streaming chunk from {node_name}: {chunk}")
-                        # 产出流式数据块
+                        # Yield the SSE chunk
                         yield f"data: {json.dumps({'id': chunk_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'choices': [{'index': 0, 'delta': {'content': chunk}, 'finish_reason': None}]})}\n\n"
                 except Exception as chunk_error:
-                    # 记录单个数据块处理异常
+                    # Log chunk-processing errors
                     logger.error(f"Error processing stream chunk: {chunk_error}")
                     continue
 
-            # 产出流结束标记
+            # Yield the stream-termination marker
             yield f"data: {json.dumps({'id': chunk_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
         except Exception as stream_error:
-            # 记录流生成过程中的异常
+            # Log stream-generation errors
             logger.error(f"Stream generation error: {stream_error}")
-            # 产出错误提示
+            # Yield an error payload
             yield f"data: {json.dumps({'error': 'Stream processing failed'})}\n\n"
 
-    # 返回流式响应对象
+    # Return the streaming response object
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-# 依赖注入函数，用于获取 graph 和 tool_config
+# Dependency-injection helper for `graph` and `tool_config`
 async def get_dependencies() -> Tuple[any, any]:
     """
-    依赖注入函数，用于获取 graph 和 tool_config。
+    Dependency-injection helper that returns `graph` and `tool_config`.
 
     Returns:
-        Tuple: 包含 (graph, tool_config) 的元组。
+        Tuple: A tuple containing `(graph, tool_config)`.
 
     Raises:
-        HTTPException: 如果 graph 或 tool_config 未初始化，则抛出 500 错误。
+        HTTPException: Raised with status 500 if `graph` or `tool_config` is not initialized.
     """
     if not graph or not tool_config:
         raise HTTPException(status_code=500, detail="Service not initialized")
@@ -420,24 +420,24 @@ request = {
 '''
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, dependencies: Tuple[any, any] = Depends(get_dependencies)):
-    """接收来自前端的请求数据进行业务的处理。
+    """Receive frontend request data and process the business logic.
 
     Args:
-        request: 请求参数。
+        request: Request payload.
 
     Returns:
-        标准的Python字典。
+        Standard Python dictionary.
     """
     try:
         graph, tool_config = dependencies
-        # 检查request是否有效
+        # Validate the request payload
         if not request.messages or not request.messages[-1].content:
             logger.error("Invalid request: Empty or invalid messages")
             raise HTTPException(status_code=400, detail="Messages cannot be empty or invalid")
         user_input = request.messages[-1].content
         logger.info(f"The user's user_input is: {user_input}")
 
-        # 定义运行时配置，包含线程ID和用户ID，使用默认值防止未定义
+        # Build runtime config with safe defaults for thread and user IDs
         config = {
             "configurable": {
                 "thread_id": f"{getattr(request, 'userId', 'unknown')}@@{getattr(request, 'conversationId', 'default')}",
@@ -445,10 +445,10 @@ async def chat_completions(request: ChatCompletionRequest, dependencies: Tuple[a
             }
         }
 
-        # 调用流式输出
+        # Handle streaming output
         if request.stream:
             return await handle_stream_response(user_input, graph, config)
-        # 调用非流式输出
+        # Handle non-streaming output
         return await handle_non_stream_response(user_input, graph, tool_config, config)
 
     except Exception as e:
@@ -458,8 +458,8 @@ async def chat_completions(request: ChatCompletionRequest, dependencies: Tuple[a
 
 if __name__ == "__main__":
     logger.info(f"Start the server on port {Config.PORT}")
-    # uvicorn是一个用于运行ASGI应用的轻量级、超快速的ASGI服务器实现
-    # 用于部署基于FastAPI框架的异步PythonWeb应用程序
+    # `uvicorn` is a lightweight, high-performance ASGI server
+    # It is used here to serve the asynchronous FastAPI application
     uvicorn.run(app, host=Config.HOST, port=Config.PORT)
 
 

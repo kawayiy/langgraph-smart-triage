@@ -6,24 +6,24 @@ from utils.config import Config
 
 def get_tools(llm_embedding):
     """
-    创建并返回工具列表
+    Create and return the tool list.
 
     Args:
-        llm_embedding: 嵌入模型实例，用于初始化向量存储
+        llm_embedding: Embedding model instance used to initialize the vector store.
 
     Returns:
-        list: 工具列表
+        list: Tool list.
     """
 
-    # 创建 Chroma 向量存储实例
+    # Create the Chroma vector store instance
     vectorstore = Chroma(
         persist_directory=Config.CHROMADB_DIRECTORY,
         collection_name=Config.CHROMADB_COLLECTION_NAME,
         embedding_function=llm_embedding,
     )
-    # 将向量存储转换为检索器
+    # Convert the vector store into a retriever
     retriever = vectorstore.as_retriever()
-    # 创建检索工具
+    # Create the retrieval tool
     retriever_tool = create_retriever_tool(
         retriever,
         name="retrieve",
@@ -31,12 +31,12 @@ def get_tools(llm_embedding):
     )
 
 
-    # 自定义 multiply 工具
+    # Custom multiply tool
     @tool
     def multiply(a: float, b: float) -> float:
         """这是计算两个数的乘积的工具，返回最终的计算结果"""
         return a * b
 
 
-    # 返回工具列表
+    # Return the tool list
     return [retriever_tool, multiply]
